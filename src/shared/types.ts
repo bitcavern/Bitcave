@@ -1,0 +1,199 @@
+// Core window system types
+export interface BaseWindow {
+  id: string;
+  type: WindowType;
+  title: string;
+  position: { x: number; y: number };
+  size: { width: number; height: number };
+  zIndex: number;
+  isLocked: boolean;
+  isMinimized: boolean;
+  metadata: Record<string, any>;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export type WindowType =
+  | "webview"
+  | "reference-webview"
+  | "markdown-editor"
+  | "graph"
+  | "chat"
+  | "code-execution"
+  | "artifact"
+  | "file-explorer"
+  | "terminal"
+  | "image-viewer"
+  | "video-player"
+  | "memory"
+  | "text"
+  | "custom";
+
+// Canvas system types
+export interface CanvasState {
+  viewport: {
+    x: number;
+    y: number;
+    zoom: number;
+  };
+  dimensions: {
+    width: number;
+    height: number;
+  };
+}
+
+// AI Tool system types
+export interface AIToolRequest {
+  toolName: string;
+  parameters: Record<string, any>;
+  windowId?: string;
+}
+
+export interface AIToolResponse {
+  success: boolean;
+  data: any;
+  error: string | null;
+  timestamp: string;
+  windowId: string | null;
+}
+
+// Code execution types
+export interface CodeExecutionRequest {
+  language: "javascript" | "python";
+  code: string;
+  packages?: string[];
+  timeout?: number;
+  memoryLimit?: number;
+}
+
+export interface CodeExecutionResult {
+  success: boolean;
+  output: string;
+  error?: string;
+  plots?: string[]; // Base64 encoded images
+  executionTime: number;
+  memoryUsed: number;
+}
+
+// Artifact system types
+export interface ArtifactConfig {
+  type:
+    | "react-component"
+    | "data-visualization"
+    | "interactive-demo"
+    | "calculator";
+  title: string;
+  description?: string;
+  dependencies: string[];
+  props?: Record<string, any>;
+  code: string;
+}
+
+// Project system types
+export interface Project {
+  id: string;
+  name: string;
+  description?: string;
+  rootPath: string;
+  createdAt: Date;
+  lastAccessed: Date;
+  settings: ProjectSettings;
+  metadata: {
+    tags: string[];
+    color?: string;
+    icon?: string;
+  };
+}
+
+export interface ProjectSettings {
+  defaultAIProvider: string;
+  codeExecutionEnabled: boolean;
+  memoryEnabled: boolean;
+  fileWatchEnabled: boolean;
+}
+
+export interface FileReference {
+  projectId: string;
+  filePath: string;
+  lineNumber?: number;
+  excerpt?: string;
+  lastAccessed: Date;
+  accessCount: number;
+}
+
+// Memory system types
+export interface MemoryEntry {
+  id: string;
+  projectId?: string;
+  type: "conversation" | "document" | "code" | "insight" | "reference";
+  content: string;
+  metadata: {
+    source: string;
+    timestamp: Date;
+    tags: string[];
+    importance: number; // 1-10 scale
+    context?: Record<string, any>;
+  };
+  embedding: number[];
+}
+
+// AI Provider types
+export interface AIProvider {
+  name: string;
+  type: "openai" | "anthropic" | "local" | "custom";
+  endpoint: string;
+  apiKey?: string;
+  model: string;
+  capabilities: string[];
+}
+
+// Application state types
+export interface AppState {
+  canvas: CanvasState;
+  windows: BaseWindow[];
+  currentProject: Project | null;
+  projects: Project[];
+  aiProviders: AIProvider[];
+  activeAIProvider: string | null;
+}
+
+// Event types for IPC communication
+export interface IPCEvents {
+  // Window management
+  "window:create": { type: WindowType; config: Partial<BaseWindow> };
+  "window:delete": { windowId: string };
+  "window:update": { windowId: string; updates: Partial<BaseWindow> };
+  "window:move": { windowId: string; position: { x: number; y: number } };
+  "window:resize": {
+    windowId: string;
+    size: { width: number; height: number };
+  };
+
+  // AI tools
+  "ai:execute-tool": AIToolRequest;
+  "ai:tool-response": AIToolResponse;
+
+  // Code execution
+  "code:execute": CodeExecutionRequest;
+  "code:result": CodeExecutionResult;
+
+  // Project management
+  "project:switch": { projectId: string };
+  "project:create": Omit<Project, "id" | "createdAt" | "lastAccessed">;
+
+  // Canvas
+  "canvas:update-viewport": { viewport: CanvasState["viewport"] };
+
+  // Additional channels
+  "windows:get-all": Record<string, never>;
+
+  // AI Service channels
+  "ai:set-api-key": { apiKey: string };
+  "ai:is-configured": Record<string, never>;
+  "ai:chat": { conversationId: string; message: string };
+  "ai:get-conversation": { conversationId: string };
+  "ai:clear-conversation": { conversationId: string };
+}
+
+export type IPCEventName = keyof IPCEvents;
+export type IPCEventData<T extends IPCEventName> = IPCEvents[T];
