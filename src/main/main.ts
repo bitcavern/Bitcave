@@ -109,6 +109,9 @@ class BitcaveApp {
 
   private setupEventHandlers(): void {
     app.on("window-all-closed", () => {
+      // Clean up resources
+      this.aiToolRegistry.dispose();
+      
       if (process.platform !== "darwin") {
         app.quit();
       }
@@ -118,6 +121,11 @@ class BitcaveApp {
       if (BrowserWindow.getAllWindows().length === 0) {
         this.createMainWindow();
       }
+    });
+
+    app.on("before-quit", () => {
+      // Clean up resources before quitting
+      this.aiToolRegistry.dispose();
     });
   }
 
@@ -297,6 +305,33 @@ class BitcaveApp {
         try {
           this.aiService.clearConversation(conversationId);
           return { success: true };
+        } catch (error) {
+          return { success: false, error: (error as Error).message };
+        }
+      }
+    );
+
+    // Code execution handler
+    ipcMain.handle(
+      "code:execute",
+      async (event, data: IPCEventData<"code:execute">) => {
+        try {
+          // Use the code execution sandbox through the AI tool registry
+          const result = await this.aiToolRegistry.executeTool(
+            "executeCode",
+            {
+              language: data.language,
+              code: data.code,
+              timeout: data.timeout,
+              memoryLimit: data.memoryLimit,
+            }
+          );
+          
+          if (result.success) {
+            return { success: true, data: result.data };
+          } else {
+            return { success: false, error: result.error };
+          }
         } catch (error) {
           return { success: false, error: (error as Error).message };
         }

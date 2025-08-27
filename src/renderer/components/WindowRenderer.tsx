@@ -1,6 +1,7 @@
 import React, { useState, useRef, useCallback } from "react";
-import type { BaseWindow } from "@/shared/types";
+import type { BaseWindow, CodeExecutionRequest, CodeExecutionResult } from "@/shared/types";
 import { WINDOW_CONFIGS } from "@/shared/constants";
+import CodeExecutionWindow from "../windows/CodeExecutionWindow";
 
 interface WindowRendererProps {
   window: BaseWindow;
@@ -10,6 +11,7 @@ interface WindowRendererProps {
   onMove: (position: { x: number; y: number }) => void;
   onResize: (size: { width: number; height: number }) => void;
   onUpdate: (updates: Partial<BaseWindow>) => void;
+  onExecuteCode?: (request: CodeExecutionRequest) => Promise<CodeExecutionResult>;
 }
 
 export const WindowRenderer: React.FC<WindowRendererProps> = ({
@@ -20,6 +22,7 @@ export const WindowRenderer: React.FC<WindowRendererProps> = ({
   onMove,
   onResize,
   onUpdate,
+  onExecuteCode,
 }) => {
   const windowRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -251,7 +254,7 @@ export const WindowRenderer: React.FC<WindowRendererProps> = ({
           overflow: "auto",
         }}
       >
-        <WindowContent window={window} onUpdate={onUpdate} />
+        <WindowContent window={window} onUpdate={onUpdate} onExecuteCode={onExecuteCode} />
       </div>
 
       {/* Resize Handles */}
@@ -342,7 +345,8 @@ export const WindowRenderer: React.FC<WindowRendererProps> = ({
 const WindowContent: React.FC<{
   window: BaseWindow;
   onUpdate: (updates: Partial<BaseWindow>) => void;
-}> = ({ window, onUpdate }) => {
+  onExecuteCode?: (request: CodeExecutionRequest) => Promise<CodeExecutionResult>;
+}> = ({ window, onUpdate, onExecuteCode }) => {
   switch (window.type) {
     case "webview":
     case "reference-webview":
@@ -412,49 +416,11 @@ const WindowContent: React.FC<{
 
     case "code-execution":
       return (
-        <div>
-          <h3>Code Execution</h3>
-          <select
-            style={{
-              marginBottom: "8px",
-              padding: "4px",
-              backgroundColor: "#111827",
-              color: "#f9fafb",
-              border: "1px solid #4b5563",
-              borderRadius: "4px",
-            }}
-          >
-            <option value="javascript">JavaScript</option>
-            <option value="python">Python</option>
-          </select>
-          <textarea
-            style={{
-              width: "100%",
-              height: "150px",
-              backgroundColor: "#111827",
-              color: "#f9fafb",
-              border: "1px solid #4b5563",
-              borderRadius: "4px",
-              padding: "8px",
-              fontFamily: "monospace",
-              fontSize: "14px",
-            }}
-            placeholder="Enter code to execute..."
-          />
-          <button
-            style={{
-              marginTop: "8px",
-              padding: "8px 16px",
-              backgroundColor: "#3b82f6",
-              color: "white",
-              border: "none",
-              borderRadius: "4px",
-              cursor: "pointer",
-            }}
-          >
-            Run Code
-          </button>
-        </div>
+        <CodeExecutionWindow
+          window={window}
+          onUpdateWindow={(windowId, updates) => onUpdate(updates)}
+          onExecuteCode={onExecuteCode}
+        />
       );
 
     case "text":

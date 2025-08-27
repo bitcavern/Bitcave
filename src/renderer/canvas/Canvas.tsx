@@ -159,7 +159,7 @@ export const Canvas: React.FC<CanvasProps> = ({
         style={{
           position: "absolute",
           bottom: "10px",
-          right: "10px",
+          left: "12px",
           backgroundColor: "rgba(0, 0, 0, 0.7)",
           color: "white",
           padding: "5px 10px",

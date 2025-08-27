@@ -5,8 +5,8 @@ import {
   ToolCall,
 } from "./openrouter-client";
 import { AIToolRegistry } from "../ai-tools/registry";
+import { getOpenRouterToolDefinitions } from "../ai-tools/tool-definitions";
 import type { WindowManager } from "../window-manager";
-import { BrowserWindow } from "electron";
 
 export interface AIConversation {
   id: string;
@@ -35,183 +35,7 @@ export class AIService {
   }
 
   private getToolDefinitions(): Tool[] {
-    return [
-      {
-        type: "function",
-        function: {
-          name: "createTextWindow",
-          description:
-            "Create a new text window with a label and optional initial content",
-          parameters: {
-            type: "object",
-            properties: {
-              label: {
-                type: "string",
-                description: "The label/title for the text window",
-              },
-              content: {
-                type: "string",
-                description: "Initial content for the text window (optional)",
-              },
-            },
-            required: ["label"],
-          },
-        },
-      },
-      {
-        type: "function",
-        function: {
-          name: "readTextByLabel",
-          description: "Read the content from a text window by label",
-          parameters: {
-            type: "object",
-            properties: {
-              label: {
-                type: "string",
-                description: "The label of the text window to read from",
-              },
-            },
-            required: ["label"],
-          },
-        },
-      },
-      {
-        type: "function",
-        function: {
-          name: "updateTextByLabel",
-          description:
-            "Update the content of a specific text window identified by label",
-          parameters: {
-            type: "object",
-            properties: {
-              label: {
-                type: "string",
-                description: "The label of the text window to update",
-              },
-              content: {
-                type: "string",
-                description: "The new content for the text window",
-              },
-              mode: {
-                type: "string",
-                enum: ["replace", "append", "prepend"],
-                description: "How to apply the content update",
-              },
-            },
-            required: ["label", "content"],
-          },
-        },
-      },
-      {
-        type: "function",
-        function: {
-          name: "updateTextLabel",
-          description:
-            "Rename a text window label (and title) by id or current label",
-          parameters: {
-            type: "object",
-            properties: {
-              windowId: { type: "string", description: "Optional window id" },
-              label: { type: "string", description: "Current label" },
-              newLabel: { type: "string", description: "New label" },
-            },
-            required: ["newLabel"],
-          },
-        },
-      },
-      {
-        type: "function",
-        function: {
-          name: "listTextWindows",
-          description:
-            "Get a list of all text windows with their labels and IDs",
-          parameters: {
-            type: "object",
-            properties: {},
-            required: [],
-          },
-        },
-      },
-      {
-        type: "function",
-        function: {
-          name: "readTextContent",
-          description: "Read the content from a specific text window",
-          parameters: {
-            type: "object",
-            properties: {
-              windowId: {
-                type: "string",
-                description: "The ID of the text window to read from",
-              },
-            },
-            required: ["windowId"],
-          },
-        },
-      },
-      {
-        type: "function",
-        function: {
-          name: "updateTextContent",
-          description: "Update the content of a specific text window",
-          parameters: {
-            type: "object",
-            properties: {
-              windowId: {
-                type: "string",
-                description: "The ID of the text window to update",
-              },
-              content: {
-                type: "string",
-                description: "The new content for the text window",
-              },
-            },
-            required: ["windowId", "content"],
-          },
-        },
-      },
-      {
-        type: "function",
-        function: {
-          name: "getWindowList",
-          description: "Get a list of all windows currently open",
-          parameters: {
-            type: "object",
-            properties: {},
-            required: [],
-          },
-        },
-      },
-      {
-        type: "function",
-        function: {
-          name: "createWindow",
-          description: "Create a new window of a specific type",
-          parameters: {
-            type: "object",
-            properties: {
-              type: {
-                type: "string",
-                enum: [
-                  "text",
-                  "webview",
-                  "markdown-editor",
-                  "graph",
-                  "chat",
-                  "code-execution",
-                ],
-                description: "The type of window to create",
-              },
-              config: {
-                type: "object",
-                description: "Configuration for the window (optional)",
-              },
-            },
-            required: ["type"],
-          },
-        },
-      },
-    ];
+    return getOpenRouterToolDefinitions();
   }
 
   async chat(conversationId: string, userMessage: string): Promise<string> {
@@ -491,17 +315,4 @@ The user interface shows windows on an infinite canvas that can be moved and res
     return Array.from(this.conversations.values());
   }
 
-  private notifyWindowCreated(window: any): void {
-    console.log(`[AIService] Notifying frontend of new window:`, window.id);
-
-    // Get the main window and send the event
-    const mainWindow = BrowserWindow.getAllWindows()[0];
-    if (mainWindow) {
-      // Send the window data directly to the renderer
-      mainWindow.webContents.send("window:created", window);
-      console.log(`[AIService] Sent window:created event to renderer`);
-    } else {
-      console.error(`[AIService] No main window found to send event`);
-    }
-  }
 }

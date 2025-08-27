@@ -38,8 +38,8 @@ export const Toolbar: React.FC<ToolbarProps> = ({
         top: "48px", // Account for 32px title bar + 16px spacing
         left: "20px",
         zIndex: 100,
-        backgroundColor: "rgba(31, 41, 55, 0.95)",
         backdropFilter: "blur(10px)",
+        backgroundColor: "rgba(31, 41, 55, 0.2)",
         border: "1px solid #4b5563",
         borderRadius: "12px",
         padding: "12px",

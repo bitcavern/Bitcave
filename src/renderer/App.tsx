@@ -3,19 +3,32 @@ import { Canvas } from "./canvas/Canvas";
 import { Toolbar } from "./components/Toolbar";
 import { WindowRenderer } from "./components/WindowRenderer";
 import { AISidebar } from "./components/AISidebar";
-import type { BaseWindow, CanvasState, WindowType } from "@/shared/types";
+import type { BaseWindow, CanvasState, WindowType, CodeExecutionRequest, CodeExecutionResult } from "@/shared/types";
 import { APP_CONFIG } from "@/shared/constants";
 
 export const App: React.FC = () => {
   const [windows, setWindows] = useState<BaseWindow[]>([]);
   const [canvasState, setCanvasState] = useState<CanvasState>({
     viewport: APP_CONFIG.canvasDefaults.viewport,
-    dimensions: { width: window.innerWidth - 300, height: window.innerHeight }, // Account for 300px sidebar
+    dimensions: { width: window.innerWidth, height: window.innerHeight }, // Full width since sidebar is floating
   });
   const [sidebarWidth, setSidebarWidth] = useState<number>(300);
   const [selectedWindowId, setSelectedWindowId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [toasts, setToasts] = useState<{ id: string; message: string }[]>([]);
+
+  // Code execution function
+  const executeCode = async (request: CodeExecutionRequest): Promise<CodeExecutionResult> => {
+    try {
+      const response = await (window as any).electronAPI.invoke('code:execute', request);
+      if (!response.success) {
+        throw new Error(response.error);
+      }
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  };
 
   // Initialize the app and load existing windows
   useEffect(() => {
@@ -86,15 +99,15 @@ export const App: React.FC = () => {
       setCanvasState((prev) => ({
         ...prev,
         dimensions: {
-          width: window.innerWidth - sidebarWidth,
+          width: window.innerWidth,
           height: window.innerHeight,
-        }, // Account for 300px sidebar
+        }, // Full width since sidebar is floating
       }));
     };
 
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
-  }, [sidebarWidth]);
+  }, []);
 
   const addWindowToState = (newWindow: BaseWindow) => {
     setWindows((prev) => {
@@ -259,7 +272,7 @@ export const App: React.FC = () => {
           position: "fixed",
           top: 0,
           left: 0,
-          right: `${sidebarWidth + 50}px`, // Leave space for AI sidebar
+          right: 0, // Full width since sidebar is floating
           height: "40px",
           backgroundColor: "rgba(31, 41, 55, 0.2)",
           backdropFilter: "blur(10px)",
@@ -267,7 +280,6 @@ export const App: React.FC = () => {
           // @ts-ignore - WebkitAppRegion is a valid CSS property for Electron
           WebkitAppRegion: "drag",
           borderBottom: "1px solid rgba(75, 85, 99, 0.5)",
-          borderBottomRightRadius: "20px",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
@@ -279,7 +291,7 @@ export const App: React.FC = () => {
         Bitcave!
       </div>
 
-      <div style={{ width: `calc(100% - ${sidebarWidth}px)`, height: "100%" }}>
+      <div style={{ width: "100%", height: "100%" }}>
         <Canvas
           state={canvasState}
           onViewportChange={handleCanvasViewportChange}
@@ -294,6 +306,7 @@ export const App: React.FC = () => {
               onMove={(position) => handleMoveWindow(window.id, position)}
               onResize={(size) => handleResizeWindow(window.id, size)}
               onUpdate={(updates) => handleUpdateWindow(window.id, updates)}
+              onExecuteCode={executeCode}
             />
           ))}
         </Canvas>

@@ -325,15 +325,20 @@ export const AISidebar: React.FC<AISidebarProps> = ({
     <div
       style={{
         position: "fixed",
-        top: 0,
-        right: 0,
+        top: "52px",
+        right: "12px",
         width: `${sidebarWidth}px`,
-        height: "100vh",
-        backgroundColor: "#1f2937",
-        borderLeft: "1px solid #374151",
+        height: "calc(100vh - 64px)",
+        backdropFilter: "blur(10px)",
+        backgroundColor: "rgba(31, 41, 55, 0.2)",
+        border: "1px solid #374151",
+        borderRadius: "12px", // macOS window border radius
         display: "flex",
         flexDirection: "column",
         zIndex: 150,
+        boxShadow:
+          "0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.2)",
+        transition: "width 0.2s ease-out, box-shadow 0.2s ease-out",
       }}
     >
       {/* Resize handle */}
@@ -348,6 +353,8 @@ export const AISidebar: React.FC<AISidebarProps> = ({
           cursor: "col-resize",
           backgroundColor: "transparent",
           zIndex: 160,
+          borderTopLeftRadius: "12px",
+          borderBottomLeftRadius: "12px",
         }}
         onMouseEnter={(e) => {
           e.currentTarget.style.backgroundColor = "rgba(59, 130, 246, 0.3)";
@@ -365,6 +372,8 @@ export const AISidebar: React.FC<AISidebarProps> = ({
           padding: "16px",
           borderBottom: "1px solid #374151",
           backgroundColor: "#111827",
+          borderTopLeftRadius: "12px",
+          borderTopRightRadius: "12px",
         }}
       >
         <div
@@ -485,6 +494,8 @@ export const AISidebar: React.FC<AISidebarProps> = ({
         style={{
           padding: "16px",
           borderTop: "1px solid #374151",
+          borderBottomLeftRadius: "12px",
+          borderBottomRightRadius: "12px",
           backgroundColor: "#111827",
         }}
       >

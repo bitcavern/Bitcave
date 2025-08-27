@@ -1,7 +1,8 @@
-import type { AIToolResponse, WindowType } from "@/shared/types";
+import type { AIToolResponse, WindowType, CodeExecutionRequest } from "@/shared/types";
 import type { WindowManager } from "../window-manager";
 import { BrowserWindow } from "electron";
 import { WINDOW_CONFIGS } from "@/shared/constants";
+import { CodeExecutionSandbox } from "../code-execution/sandbox";
 
 export interface AITool {
   name: string;
@@ -13,9 +14,11 @@ export interface AITool {
 export class AIToolRegistry {
   private tools: Map<string, AITool> = new Map();
   private windowManager: WindowManager;
+  private codeExecutionSandbox: CodeExecutionSandbox;
 
   constructor(windowManager: WindowManager) {
     this.windowManager = windowManager;
+    this.codeExecutionSandbox = new CodeExecutionSandbox();
     this.registerDefaultTools();
   }
 
@@ -82,6 +85,10 @@ export class AIToolRegistry {
 
   public getToolDescription(toolName: string): AITool | undefined {
     return this.tools.get(toolName);
+  }
+
+  public dispose(): void {
+    this.codeExecutionSandbox.dispose();
   }
 
   private registerDefaultTools(): void {
@@ -646,6 +653,92 @@ export class AIToolRegistry {
         return updated;
       },
     });
+
+    // Code Execution Tool
+    this.registerTool({
+      name: "executeCode",
+      description: "Execute Python or JavaScript code in a secure sandbox environment. This tool automatically creates a code execution window (if needed), fills it with your code, runs the code, and returns the output. Perfect for running calculations, data processing, or testing code snippets.",
+      parameters: {
+        language: {
+          type: "string",
+          required: true,
+          description: "Programming language to execute: 'python' or 'javascript'",
+        },
+        code: {
+          type: "string", 
+          required: true,
+          description: "The code to execute. Can be multiple lines.",
+        },
+        description: {
+          type: "string",
+          required: false,
+          description: "Optional description of what the code does (will be used as window title)",
+        },
+      },
+      execute: async (params) => {
+        // Validate language
+        const language = params.language?.toLowerCase();
+        if (!language || !['python', 'javascript', 'js'].includes(language)) {
+          throw new Error("Language must be 'python' or 'javascript'");
+        }
+        
+        // Normalize language
+        const normalizedLanguage = (language === 'js') ? 'javascript' : language;
+        
+        // Validate code
+        const code = params.code;
+        if (!code || typeof code !== 'string' || !code.trim()) {
+          throw new Error("Code is required and must be a non-empty string");
+        }
+        
+        // Create execution request
+        const request: CodeExecutionRequest = {
+          language: normalizedLanguage as 'python' | 'javascript',
+          code: code.trim(),
+          timeout: normalizedLanguage === 'python' ? 10000 : 5000, // 10s for Python, 5s for JS
+          memoryLimit: normalizedLanguage === 'python' ? 256 : 128, // 256MB for Python, 128MB for JS
+        };
+        
+        // Execute code
+        const result = await this.codeExecutionSandbox.executeCode(request);
+        
+        // Create code execution window to display the results
+        const title = params.description || `${normalizedLanguage} execution`;
+        const window = await this.windowManager.createWindow("code-execution", {
+          title,
+          metadata: {
+            code: request.code,
+            language: request.language,
+            lastExecution: {
+              request,
+              result,
+              timestamp: new Date().toISOString(),
+            },
+            history: [{
+              id: Date.now().toString(),
+              request,
+              result,
+              timestamp: new Date(),
+            }],
+          },
+        });
+        
+        this.triggerWindowCreated(window);
+        
+        // Return execution result with window info
+        return {
+          success: result.success,
+          output: result.output,
+          error: result.error,
+          executionTime: result.executionTime,
+          windowId: window.id,
+          language: request.language,
+          code: request.code,
+          timestamp: new Date().toISOString(),
+        };
+      },
+    });
+
   }
 
   private triggerWindowCreated(window: any): void {
