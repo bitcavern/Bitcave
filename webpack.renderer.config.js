@@ -13,6 +13,10 @@ module.exports = {
     extensions: [".ts", ".tsx", ".js", ".jsx"],
     alias: {
       "@": path.resolve(__dirname, "src"),
+      "node:path": require.resolve("path-browserify"),
+    },
+    fallback: {
+      path: require.resolve("path-browserify"),
     },
   },
   module: {

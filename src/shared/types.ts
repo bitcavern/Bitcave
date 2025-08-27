@@ -168,6 +168,7 @@ export interface IPCEvents {
     windowId: string;
     size: { width: number; height: number };
   };
+  "window:restore": { windowId: string };
 
   // AI tools
   "ai:execute-tool": AIToolRequest;
@@ -186,6 +187,20 @@ export interface IPCEvents {
 
   // Additional channels
   "windows:get-all": Record<string, never>;
+  "window:set-selected": { windowId: string | null };
+  "window:get-selected": Record<string, never>;
+
+  // Webview channels
+  "webview:create": { windowId: string; url: string };
+  "webview:get-content": { windowId: string };
+  "webview:set-bounds": {
+    windowId: string;
+    bounds: { x: number; y: number; width: number; height: number };
+  };
+  "webview:go-back": { windowId: string };
+  "webview:go-forward": { windowId: string };
+  "webview:reload": { windowId: string };
+  "webview:update-canvas-offset": { offsetX: number; offsetY: number };
 
   // AI Service channels
   "ai:set-api-key": { apiKey: string };

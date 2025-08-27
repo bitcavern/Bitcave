@@ -1,7 +1,12 @@
 import React, { useState, useRef, useCallback } from "react";
-import type { BaseWindow, CodeExecutionRequest, CodeExecutionResult } from "@/shared/types";
+import type {
+  BaseWindow,
+  CodeExecutionRequest,
+  CodeExecutionResult,
+} from "@/shared/types";
 import { WINDOW_CONFIGS } from "@/shared/constants";
 import CodeExecutionWindow from "../windows/CodeExecutionWindow";
+import { WebviewWindow } from "../windows/WebviewWindow";
 
 interface WindowRendererProps {
   window: BaseWindow;
@@ -11,7 +16,9 @@ interface WindowRendererProps {
   onMove: (position: { x: number; y: number }) => void;
   onResize: (size: { width: number; height: number }) => void;
   onUpdate: (updates: Partial<BaseWindow>) => void;
-  onExecuteCode?: (request: CodeExecutionRequest) => Promise<CodeExecutionResult>;
+  onExecuteCode?: (
+    request: CodeExecutionRequest
+  ) => Promise<CodeExecutionResult>;
 }
 
 export const WindowRenderer: React.FC<WindowRendererProps> = ({
@@ -40,8 +47,49 @@ export const WindowRenderer: React.FC<WindowRendererProps> = ({
     height: 0,
     direction: "",
   });
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [editTitle, setEditTitle] = useState(window.title);
+  const titleInputRef = useRef<HTMLInputElement>(null);
 
   const windowConfig = WINDOW_CONFIGS[window.type];
+
+  // Handle title editing
+  const handleTitleClick = useCallback(() => {
+    if (window.isLocked) return;
+    setIsEditingTitle(true);
+    setEditTitle(window.title);
+    setTimeout(() => titleInputRef.current?.focus(), 0);
+  }, [window.isLocked, window.title]);
+
+  const handleTitleSubmit = useCallback(() => {
+    if (editTitle.trim() && editTitle !== window.title) {
+      onUpdate({
+        title: editTitle.trim(),
+        metadata: {
+          ...window.metadata,
+          label: editTitle.trim(),
+        },
+      });
+    }
+    setIsEditingTitle(false);
+  }, [editTitle, window.title, window.metadata, onUpdate]);
+
+  const handleTitleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === "Enter") {
+        handleTitleSubmit();
+      } else if (e.key === "Escape") {
+        setEditTitle(window.title);
+        setIsEditingTitle(false);
+      }
+    },
+    [handleTitleSubmit, window.title]
+  );
+
+  // Update local title when window title changes
+  React.useEffect(() => {
+    setEditTitle(window.title);
+  }, [window.title]);
 
   // Handle title bar drag for moving
   const handleTitleMouseDown = useCallback(
@@ -190,20 +238,69 @@ export const WindowRenderer: React.FC<WindowRendererProps> = ({
         }}
         onMouseDown={handleTitleMouseDown}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+            flex: 1,
+            minWidth: 0,
+          }}
+        >
           <span style={{ fontSize: "16px" }}>{windowConfig.icon}</span>
-          <span
-            style={{
-              fontSize: "14px",
-              fontWeight: "500",
-              color: "#f9fafb",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-            }}
-          >
-            {window.title}
-          </span>
+          {isEditingTitle ? (
+            <input
+              ref={titleInputRef}
+              value={editTitle}
+              onChange={(e) => setEditTitle(e.target.value)}
+              onBlur={handleTitleSubmit}
+              onKeyDown={handleTitleKeyDown}
+              onClick={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
+              style={{
+                fontSize: "14px",
+                fontWeight: "500",
+                color: "#f9fafb",
+                background: "#1f2937",
+                border: "1px solid #3b82f6",
+                borderRadius: "4px",
+                padding: "2px 6px",
+                outline: "none",
+                minWidth: 0,
+                flex: 1,
+              }}
+            />
+          ) : (
+            <span
+              onClick={handleTitleClick}
+              style={{
+                fontSize: "14px",
+                fontWeight: "500",
+                color: "#f9fafb",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+                cursor: window.isLocked ? "default" : "pointer",
+                flex: 1,
+                minWidth: 0,
+                padding: "2px 4px",
+                borderRadius: "4px",
+                transition: "background-color 0.2s",
+              }}
+              onMouseEnter={(e) => {
+                if (!window.isLocked) {
+                  e.currentTarget.style.backgroundColor =
+                    "rgba(59, 130, 246, 0.2)";
+                }
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = "transparent";
+              }}
+              title={window.isLocked ? undefined : "Click to edit title"}
+            >
+              {window.title}
+            </span>
+          )}
           {window.isLocked && (
             <span style={{ fontSize: "12px", color: "#9ca3af" }}>🔒</span>
           )}
@@ -254,7 +351,11 @@ export const WindowRenderer: React.FC<WindowRendererProps> = ({
           overflow: "auto",
         }}
       >
-        <WindowContent window={window} onUpdate={onUpdate} onExecuteCode={onExecuteCode} />
+        <WindowContent
+          window={window}
+          onUpdate={onUpdate}
+          onExecuteCode={onExecuteCode}
+        />
       </div>
 
       {/* Resize Handles */}
@@ -345,17 +446,18 @@ export const WindowRenderer: React.FC<WindowRendererProps> = ({
 const WindowContent: React.FC<{
   window: BaseWindow;
   onUpdate: (updates: Partial<BaseWindow>) => void;
-  onExecuteCode?: (request: CodeExecutionRequest) => Promise<CodeExecutionResult>;
+  onExecuteCode?: (
+    request: CodeExecutionRequest
+  ) => Promise<CodeExecutionResult>;
 }> = ({ window, onUpdate, onExecuteCode }) => {
   switch (window.type) {
     case "webview":
     case "reference-webview":
       return (
-        <div>
-          <h3>Webview Window</h3>
-          <p>URL: {window.metadata?.url || "No URL set"}</p>
-          <p>This will be a webview component once implemented.</p>
-        </div>
+        <WebviewWindow
+          window={window}
+          onUpdateWindow={(windowId, updates) => onUpdate(updates)}
+        />
       );
 
     case "markdown-editor":
@@ -383,7 +485,7 @@ const WindowContent: React.FC<{
     case "chat":
       return (
         <div>
-          <h3>AI Chat</h3>
+          <h3>Bit Chat</h3>
           <div
             style={{
               height: "200px",

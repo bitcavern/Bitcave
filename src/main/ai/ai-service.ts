@@ -7,6 +7,7 @@ import {
 import { AIToolRegistry } from "../ai-tools/registry";
 import { getOpenRouterToolDefinitions } from "../ai-tools/tool-definitions";
 import type { WindowManager } from "../window-manager";
+import { AILogger } from "./logger";
 
 export interface AIConversation {
   id: string;
@@ -20,14 +21,17 @@ export class AIService {
   private toolRegistry: AIToolRegistry;
   private windowManager: WindowManager;
   private conversations: Map<string, AIConversation> = new Map();
+  private logger: AILogger;
 
   constructor(toolRegistry: AIToolRegistry, windowManager: WindowManager) {
     this.toolRegistry = toolRegistry;
     this.windowManager = windowManager;
+    this.logger = new AILogger();
   }
 
   setApiKey(apiKey: string) {
     this.client = new OpenRouterClient(apiKey);
+    this.client.setLogger(this.logger);
   }
 
   isConfigured(): boolean {
@@ -48,271 +52,329 @@ export class AIService {
       throw new Error("AI service not configured. Please set an API key.");
     }
 
-    // Get or create conversation
-    let conversation = this.conversations.get(conversationId);
-    if (!conversation) {
-      conversation = {
-        id: conversationId,
-        messages: [
-          {
-            role: "system",
-            content: `You are an AI assistant for Bitcave, a dashboard application with an infinite canvas where users can create and manage different types of windows.
-
-Your primary capabilities include:
-- Creating and managing text windows with custom labels
-- Reading and updating content in text windows
-- Listing and organizing windows
-- Creating other types of windows (webview, markdown, graphs, etc.)
-
-You should be helpful, concise, and proactive in using the available tools to assist users. When users ask you to create content, actually create the windows and populate them. Always use the tools available to you rather than just describing what you would do.
-
-The user interface shows windows on an infinite canvas that can be moved and resized. Each text window has a clear label and ID for easy reference.`,
-          },
-        ],
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-      this.conversations.set(conversationId, conversation);
-    }
-
-    // Add user message
-    conversation.messages.push({
-      role: "user",
-      content: userMessage,
-    });
-
     try {
+      // Get or create conversation
+      let conversation = this.conversations.get(conversationId);
+      if (!conversation) {
+        conversation = {
+          id: conversationId,
+          messages: [],
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+        this.conversations.set(conversationId, conversation);
+      }
+
+      // Add user message
+      conversation.messages.push({
+        role: "user",
+        content: userMessage,
+      });
+
+      return await this.processConversationLoop(conversationId, conversation);
+    } catch (error) {
+      console.error("AI Service error:", error);
+      this.logger.logError(conversationId, error, { userMessage });
+      throw error;
+    }
+  }
+
+  private async processConversationLoop(conversationId: string, conversation: AIConversation): Promise<string> {
+    while (true) {
+      // Create context message
       const contextMessage: OpenRouterMessage = {
         role: "system",
         content: this.buildWindowContextMessage(),
       };
 
-      console.log(
-        `[AIService] Making API call with ${
-          conversation.messages.length
-        } messages (+1 context) and ${this.getToolDefinitions().length} tools`
-      );
-
-      // Make API call with tools and dynamic context
-      const response = await this.client.createChatCompletion({
+      // Prepare request
+      const request = {
         messages: [...conversation.messages, contextMessage],
         tools: this.getToolDefinitions(),
-        tool_choice: "auto",
+        tool_choice: "auto" as const,
         temperature: 0.7,
         max_tokens: 1000,
-      });
+      };
 
-      console.log(
-        `[AIService] Received API response with ${response.choices.length} choices`
-      );
+      // Log request and make API call
+      this.logger.logRequest(conversationId, request);
+      const response = await this.client!.createChatCompletion(request);
+      this.logger.logResponse(conversationId, response);
 
       const choice = response.choices[0];
       if (!choice) {
-        console.error("[AIService] No response choice from AI");
         throw new Error("No response from AI");
       }
 
-      const assistantMessage = choice.message;
-      console.log(`[AIService] Assistant message:`, {
-        role: assistantMessage.role,
-        content: assistantMessage.content?.substring(0, 100) + "...",
-        has_tool_calls: !!assistantMessage.tool_calls,
-        tool_calls_count: assistantMessage.tool_calls?.length || 0,
-      });
+      let assistantMessage = choice.message;
 
-      // Handle tool calls if present
-      if (
-        assistantMessage.tool_calls &&
-        assistantMessage.tool_calls.length > 0
-      ) {
-        // Add the assistant message with tool calls
+      // Check for XAI XML function calls
+      if (assistantMessage.content && assistantMessage.content.includes("<xai:function_call")) {
+        console.log(`[AIService] Detected XAI XML function call format, parsing...`);
+        assistantMessage = this.parseXaiXmlFunctionCalls(assistantMessage as OpenRouterMessage);
+      }
+
+      // Case 1: Has tool calls - execute them and continue loop
+      if (assistantMessage.tool_calls && assistantMessage.tool_calls.length > 0) {
+        console.log(`[AIService] Processing ${assistantMessage.tool_calls.length} tool calls`);
+        
+        // Add assistant message with tool calls
         conversation.messages.push({
           role: "assistant",
           content: assistantMessage.content || "",
           tool_calls: assistantMessage.tool_calls,
         });
 
-        console.log(
-          `[AIService] Executing ${assistantMessage.tool_calls.length} tool calls`
-        );
-
         // Execute each tool call
-        for (const toolCall of assistantMessage.tool_calls) {
-          console.log(
-            `[AIService] Executing tool: ${toolCall.function.name} with args:`,
-            toolCall.function.arguments
-          );
-
-          try {
-            const parsedArgs = JSON.parse(toolCall.function.arguments);
-            console.log(`[AIService] Parsed args:`, parsedArgs);
-
-            const result = await this.toolRegistry.executeTool(
-              toolCall.function.name,
-              parsedArgs
-            );
-
-            console.log(`[AIService] Tool execution result:`, result);
-
-            // Add tool result message
-            conversation.messages.push({
-              role: "tool",
-              content: JSON.stringify(result),
-              tool_call_id: toolCall.id,
-            });
-          } catch (error) {
-            console.error(
-              `[AIService] Tool execution error for ${toolCall.function.name}:`,
-              error
-            );
-
-            // Add error message
-            conversation.messages.push({
-              role: "tool",
-              content: JSON.stringify({ error: (error as Error).message }),
-              tool_call_id: toolCall.id,
-            });
-          }
-        }
-
-        // Get final response after tool execution (refresh context)
-        const finalContext: OpenRouterMessage = {
-          role: "system",
-          content: this.buildWindowContextMessage(),
-        };
-        const finalResponse = await this.client.createChatCompletion({
-          messages: [...conversation.messages, finalContext],
-          tools: this.getToolDefinitions(),
-          tool_choice: "auto",
-          temperature: 0.7,
-          max_tokens: 1000,
-        });
-
-        const finalChoice = finalResponse.choices[0];
-        if (finalChoice) {
-          const cleaned = (finalChoice.message.content || "").replace(
-            /^\s+/,
-            ""
-          );
-          if (cleaned) {
-            conversation.messages.push({ role: "assistant", content: cleaned });
-            conversation.updatedAt = new Date();
-            return cleaned;
-          }
-          // Auto-continue once if empty
-          const continueMsg: OpenRouterMessage = {
-            role: "user",
-            content: "Continue.",
-          };
-          const contResp = await this.client.createChatCompletion({
-            messages: [...conversation.messages, continueMsg, finalContext],
-            tools: this.getToolDefinitions(),
-            tool_choice: "auto",
-            temperature: 0.7,
-            max_tokens: 1000,
-          });
-          const contChoice = contResp.choices[0];
-          const contClean = (contChoice?.message.content || "").replace(
-            /^\s+/,
-            ""
-          );
-          if (contClean) {
-            conversation.messages.push({
-              role: "assistant",
-              content: contClean,
-            });
-            conversation.updatedAt = new Date();
-            return contClean;
-          }
-        }
+        await this.executeToolCalls(conversationId, conversation, assistantMessage.tool_calls);
+        
+        // Continue loop to get next response
+        continue;
       }
 
-      // No tool calls, just return the content
-      const cleanedInitial = (assistantMessage.content || "").replace(
-        /^\s+/,
-        ""
-      );
-      if (cleanedInitial) {
+      // Case 2: Has content - return it
+      const content = (assistantMessage.content || "").trim();
+      if (content) {
+        console.log(`[AIService] Got content response:`, content.substring(0, 100));
         conversation.messages.push({
           role: "assistant",
-          content: cleanedInitial,
+          content: content,
         });
         conversation.updatedAt = new Date();
-        return cleanedInitial;
-      }
-      // If empty, try one auto-continue
-      const contextMessage2: OpenRouterMessage = {
-        role: "system",
-        content: this.buildWindowContextMessage(),
-      };
-      const contResp2 = await this.client.createChatCompletion({
-        messages: [
-          ...conversation.messages,
-          { role: "user", content: "Continue." },
-          contextMessage2,
-        ],
-        tools: this.getToolDefinitions(),
-        tool_choice: "auto",
-        temperature: 0.7,
-        max_tokens: 1000,
-      });
-      const contChoice2 = contResp2.choices[0];
-      const contClean2 = (contChoice2?.message.content || "").replace(
-        /^\s+/,
-        ""
-      );
-      if (contClean2) {
-        conversation.messages.push({ role: "assistant", content: contClean2 });
-        conversation.updatedAt = new Date();
-        return contClean2;
+        return content;
       }
 
-      throw new Error("No content in AI response");
-    } catch (error) {
-      console.error("AI Service error:", error);
-      throw error;
+      // Case 3: No content, check reasoning and inject hidden user message
+      if ((assistantMessage as any).reasoning) {
+        const reasoning = (assistantMessage as any).reasoning;
+        console.log(`[AIService] No content but has reasoning, injecting hidden user message`);
+        
+        // Add assistant message with reasoning (for history)
+        conversation.messages.push({
+          role: "assistant",
+          content: reasoning,
+        });
+
+        // Add hidden user message to trigger continuation
+        conversation.messages.push({
+          role: "user",
+          content: "Use a tool call to continue this plan.",
+        });
+
+        // Continue loop
+        continue;
+      }
+
+      // Case 4: No content, no reasoning - this shouldn't happen but handle gracefully
+      console.warn(`[AIService] Response has no content and no reasoning`);
+      throw new Error("AI response has no content");
     }
   }
 
-  private buildWindowContextMessage(): string {
-    const windows = (global as any)?.bitcaveApp
-      ? (global as any).bitcaveApp["windowManager"].getAllWindows?.() || []
-      : this.windowManager?.getAllWindows?.() || [];
+  private async executeToolCalls(conversationId: string, conversation: AIConversation, toolCalls: ToolCall[]): Promise<void> {
+    for (const toolCall of toolCalls) {
+      console.log(`[AIService] Executing tool: ${toolCall.function.name}`);
 
-    const summary = windows.map((w: any) => ({
-      id: w.id,
-      type: w.type,
-      title: w.title,
-      label: w.metadata?.label || null,
-      position: w.position,
-      size: w.size,
-      isLocked: w.isLocked,
-      isMinimized: w.isMinimized,
-      lastModified: w.metadata?.lastModified || null,
-      contentInfo:
-        typeof w.metadata?.content === "string"
-          ? { chars: w.metadata.content.length }
-          : undefined,
-    }));
+      try {
+        // Parse arguments
+        let parsedArgs: any;
+        const argsString = toolCall.function.arguments.trim();
+        
+        try {
+          parsedArgs = JSON.parse(argsString);
+        } catch (parseError) {
+          console.warn(`[AIService] JSON parse failed, using regex fallback`);
+          parsedArgs = this.extractArgsWithRegex(argsString, conversationId, toolCall.function.name);
+        }
 
-    const instruction =
-      "Context: This is the current open window state. Do NOT assume in-memory content is fresh. If you need the current text, explicitly call readTextContent/readTextByLabel before answering.";
+        // Execute tool
+        const result = await this.toolRegistry.executeTool(toolCall.function.name, parsedArgs);
+        this.logger.logToolCall(conversationId, toolCall.function.name, parsedArgs, result);
 
-    return `{"windows": ${JSON.stringify(summary)}, "note": ${JSON.stringify(
-      instruction
-    )}}`;
+        // Add tool result to conversation
+        const serializedResult = JSON.stringify(result, null, 2);
+        conversation.messages.push({
+          role: "tool",
+          content: serializedResult,
+          tool_call_id: toolCall.id,
+        });
+      } catch (error) {
+        console.error(`[AIService] Tool execution error:`, error);
+        this.logger.logError(conversationId, error, {
+          toolName: toolCall.function.name,
+          toolCallId: toolCall.id,
+        });
+
+        // Add error result
+        const errorResult = {
+          error: error instanceof Error ? error.message : String(error),
+          tool: toolCall.function.name,
+          timestamp: new Date().toISOString(),
+        };
+
+        conversation.messages.push({
+          role: "tool",
+          content: JSON.stringify(errorResult),
+          tool_call_id: toolCall.id,
+        });
+      }
+    }
   }
 
-  getConversation(conversationId: string): AIConversation | undefined {
-    return this.conversations.get(conversationId);
+  private extractArgsWithRegex(argsString: string, conversationId: string, toolName: string): any {
+    console.log(`[AIService] Attempting regex extraction for tool: ${toolName}`);
+    
+    const extractedArgs: any = {};
+    
+    // Improved regex patterns that handle escaped quotes and newlines better
+    const patterns = [
+      // Match "key": "value" (with potential escapes)
+      /"(\w+)":\s*"([^"\\]*(\\.[^"\\]*)*)"/g,
+      // Match "key": value (non-string values)
+      /"(\w+)":\s*([^,}\s]+)/g,
+      // Match key: "value" (without quotes around key)
+      /(\w+):\s*"([^"\\]*(\\.[^"\\]*)*)"/g,
+      // Match key: value (simple case)
+      /(\w+):\s*([^,}\s]+)/g,
+    ];
+
+    let matchFound = false;
+
+    for (const pattern of patterns) {
+      let match;
+      const regex = new RegExp(pattern.source, pattern.flags);
+      
+      while ((match = regex.exec(argsString)) !== null) {
+        const key = match[1];
+        let value = match[2];
+        
+        // Try to parse the value appropriately
+        if (value === "true" || value === "false") {
+          extractedArgs[key] = value === "true";
+          continue;
+        } else if (/^\d+$/.test(value)) {
+          extractedArgs[key] = parseInt(value, 10);
+          continue;
+        } else if (/^\d*\.\d+$/.test(value)) {
+          extractedArgs[key] = parseFloat(value);
+          continue;
+        } else if (value.startsWith('"') && value.endsWith('"')) {
+          // Remove surrounding quotes and handle escaped characters
+          value = value.slice(1, -1).replace(/\\"/g, '"').replace(/\\n/g, '\n').replace(/\\\\/g, '\\');
+        }
+        
+        extractedArgs[key] = value;
+        matchFound = true;
+        console.log(`[AIService] Extracted: ${key} = ${typeof value === 'string' ? value.substring(0, 50) + '...' : value}`);
+      }
+    }
+
+    if (!matchFound) {
+      console.warn(`[AIService] No regex patterns matched for tool: ${toolName}`);
+      console.warn(`[AIService] Raw args string:`, argsString);
+    }
+
+    this.logger.logParsingIssue(conversationId, toolName, argsString, extractedArgs, "regex_extraction");
+    
+    return extractedArgs;
+  }
+
+  private parseXaiXmlFunctionCalls(message: OpenRouterMessage): OpenRouterMessage {
+    const content = message.content || "";
+    const xmlCallRegex = /<xai:function_call name="([^"]+)">(.*?)<\/xai:function_call>/gs;
+    const toolCalls: ToolCall[] = [];
+    
+    let match;
+    let callId = 1;
+    
+    while ((match = xmlCallRegex.exec(content)) !== null) {
+      const functionName = match[1];
+      const parametersXml = match[2];
+      
+      // Extract parameters from XML
+      const parameterRegex = /<parameter name="([^"]+)">(.*?)<\/parameter>/gs;
+      const args: any = {};
+      
+      let paramMatch;
+      while ((paramMatch = parameterRegex.exec(parametersXml)) !== null) {
+        const paramName = paramMatch[1];
+        let paramValue = paramMatch[2].trim();
+        
+        // Try to parse as JSON if it looks like JSON
+        if ((paramValue.startsWith('[') && paramValue.endsWith(']')) ||
+            (paramValue.startsWith('{') && paramValue.endsWith('}'))) {
+          try {
+            paramValue = JSON.parse(paramValue);
+          } catch {
+            // Keep as string if JSON parsing fails
+          }
+        }
+        
+        args[paramName] = paramValue;
+      }
+      
+      toolCalls.push({
+        id: `xai_call_${callId++}`,
+        type: "function",
+        function: {
+          name: functionName,
+          arguments: JSON.stringify(args)
+        }
+      });
+    }
+    
+    return {
+      ...message,
+      tool_calls: toolCalls.length > 0 ? toolCalls : message.tool_calls,
+      content: toolCalls.length > 0 ? "" : message.content // Clear content if we extracted tool calls
+    };
+  }
+
+  private buildWindowContextMessage(): string {
+    const windows = this.windowManager.getAllWindows();
+    
+    let context = "Current Dashboard State:\n";
+    
+    if (windows.length === 0) {
+      context += "- No windows currently open\n";
+    } else {
+      context += `- ${windows.length} window(s) open:\n`;
+      windows.forEach((window, index) => {
+        const typeInfo = window.type === 'webview' 
+          ? ` (URL: ${(window.metadata as any)?.url || 'unknown'})` 
+          : window.type === 'text'
+          ? ` (${(window.metadata as any)?.content?.length || 0} chars)`
+          : window.type === 'code-execution'
+          ? ` (${(window.metadata as any)?.language || 'unknown'} code)`
+          : '';
+          
+        context += `  ${index + 1}. ${window.title || 'Untitled'} [${window.type}]${typeInfo} at (${window.position.x}, ${window.position.y}) ${window.size.width}x${window.size.height}\n`;
+        
+        if (window.metadata?.label) {
+          context += `     Label: ${window.metadata.label}\n`;
+        }
+      });
+    }
+    
+    context += "\nAvailable Actions:\n";
+    context += "- Create windows (webview, text, code, markdown, graph, chat)\n";
+    context += "- Modify window content, position, size\n";
+    context += "- Execute code in sandboxed environments\n";
+    context += "- Search and manipulate window data\n";
+    context += "- Get system information and metrics\n";
+    
+    return context;
+  }
+
+  getConversations(): AIConversation[] {
+    return Array.from(this.conversations.values());
   }
 
   clearConversation(conversationId: string): void {
     this.conversations.delete(conversationId);
   }
 
-  getAllConversations(): AIConversation[] {
-    return Array.from(this.conversations.values());
+  clearAllConversations(): void {
+    this.conversations.clear();
   }
-
 }

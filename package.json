@@ -32,17 +32,27 @@
     "rag"
   ],
   "dependencies": {
+    "@types/cheerio": "^0.22.35",
+    "@types/turndown": "^5.0.5",
+    "cheerio": "^1.1.2",
     "dotenv": "^17.2.1",
     "electron": "^37.3.1",
     "node-pty": "^1.0.0",
+    "path-browserify": "1.0.1",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
+    "react-markdown": "^10.1.0",
+    "react-syntax-highlighter": "15.6.6",
+    "rehype-highlight": "^7.0.2",
+    "remark-gfm": "^4.0.1",
+    "turndown": "^7.2.1",
     "typescript": "^5.9.2",
     "uuid": "^11.1.0"
   },
   "devDependencies": {
     "@types/react": "^19.1.11",
     "@types/react-dom": "^19.1.8",
+    "@types/react-syntax-highlighter": "15.5.13",
     "@types/uuid": "^10.0.0",
     "@typescript-eslint/eslint-plugin": "^8.41.0",
     "@typescript-eslint/parser": "^8.41.0",

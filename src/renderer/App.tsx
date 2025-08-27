@@ -3,7 +3,13 @@ import { Canvas } from "./canvas/Canvas";
 import { Toolbar } from "./components/Toolbar";
 import { WindowRenderer } from "./components/WindowRenderer";
 import { AISidebar } from "./components/AISidebar";
-import type { BaseWindow, CanvasState, WindowType, CodeExecutionRequest, CodeExecutionResult } from "@/shared/types";
+import type {
+  BaseWindow,
+  CanvasState,
+  WindowType,
+  CodeExecutionRequest,
+  CodeExecutionResult,
+} from "@/shared/types";
 import { APP_CONFIG } from "@/shared/constants";
 
 export const App: React.FC = () => {
@@ -18,9 +24,14 @@ export const App: React.FC = () => {
   const [toasts, setToasts] = useState<{ id: string; message: string }[]>([]);
 
   // Code execution function
-  const executeCode = async (request: CodeExecutionRequest): Promise<CodeExecutionResult> => {
+  const executeCode = async (
+    request: CodeExecutionRequest
+  ): Promise<CodeExecutionResult> => {
     try {
-      const response = await (window as any).electronAPI.invoke('code:execute', request);
+      const response = await (window as any).electronAPI.invoke(
+        "code:execute",
+        request
+      );
       if (!response.success) {
         throw new Error(response.error);
       }
@@ -46,7 +57,7 @@ export const App: React.FC = () => {
       }
     };
 
-    // Listen for window creation events from AI tools
+    // Listen for window creation events from Bit tools
     const handleWindowCreated = (_event: any, window: BaseWindow) => {
       console.log("[App] Received window:created event:", window.id);
       addWindowToState(window);
@@ -72,7 +83,7 @@ export const App: React.FC = () => {
     };
   }, []);
 
-  // Toast listener for errors/info from main process (e.g., AI sanitization)
+  // Toast listener for errors/info from main process (e.g., Bit sanitization)
   useEffect(() => {
     const handleToast = (_event: unknown, message: string) => {
       const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -215,10 +226,40 @@ export const App: React.FC = () => {
     }
   };
 
+  const handleRestoreWindow = async (windowId: string) => {
+    try {
+      const result = await window.electronAPI.invoke("window:restore", {
+        windowId,
+      });
+
+      if (result.success) {
+        setWindows((prev) =>
+          prev.map((w) => (w.id === windowId ? result.data : w))
+        );
+      }
+    } catch (error) {
+      console.error("Failed to restore window:", error);
+    }
+  };
+
   const handleCanvasViewportChange = (viewport: CanvasState["viewport"]) => {
     setCanvasState((prev) => ({ ...prev, viewport }));
     // Optionally save to main process
     window.electronAPI.invoke("canvas:update-viewport", { viewport });
+
+    // Update webview positions to account for canvas panning
+    const updateWebviewOffset = async () => {
+      try {
+        await window.electronAPI.invoke("webview:update-canvas-offset", {
+          offsetX: viewport.x,
+          offsetY: viewport.y,
+        });
+      } catch (error) {
+        console.error("Failed to update webview canvas offset:", error);
+      }
+    };
+
+    updateWebviewOffset();
   };
 
   const handleCreateTextWindow = async (label: string, content?: string) => {
@@ -245,6 +286,21 @@ export const App: React.FC = () => {
       console.error("Failed to create text window:", error);
     }
   };
+
+  // Update selected window in main process when it changes
+  useEffect(() => {
+    const updateSelectedWindow = async () => {
+      try {
+        await window.electronAPI.invoke("window:set-selected", {
+          windowId: selectedWindowId,
+        });
+      } catch (error) {
+        console.error("Failed to update selected window:", error);
+      }
+    };
+
+    updateSelectedWindow();
+  }, [selectedWindowId]);
 
   if (isLoading) {
     return (
@@ -317,6 +373,8 @@ export const App: React.FC = () => {
         selectedWindowId={selectedWindowId}
         windowCount={windows.length}
         canvasState={canvasState}
+        windows={windows}
+        onRestoreWindow={handleRestoreWindow}
       />
 
       <AISidebar

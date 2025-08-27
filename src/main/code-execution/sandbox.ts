@@ -1,24 +1,16 @@
 import * as vm from 'vm';
-import { spawn } from 'child_process';
-import { promisify } from 'util';
 import { CodeExecutionRequest, CodeExecutionResult } from '@/shared/types';
-import * as path from 'path';
-import * as fs from 'fs';
-import * as os from 'os';
-import { v4 as uuidv4 } from 'uuid';
+import { BrowserWindow } from 'electron';
 
 export class CodeExecutionSandbox {
-  private tempDir: string;
+  private mainWindow: BrowserWindow | null = null;
   
-  constructor() {
-    this.tempDir = path.join(os.tmpdir(), 'bitcave-code-execution');
-    this.ensureTempDir();
+  constructor(mainWindow?: BrowserWindow) {
+    this.mainWindow = mainWindow || null;
   }
 
-  private ensureTempDir(): void {
-    if (!fs.existsSync(this.tempDir)) {
-      fs.mkdirSync(this.tempDir, { recursive: true });
-    }
+  public setMainWindow(mainWindow: BrowserWindow): void {
+    this.mainWindow = mainWindow;
   }
 
   public async executeCode(request: CodeExecutionRequest): Promise<CodeExecutionResult> {
@@ -116,149 +108,126 @@ export class CodeExecutionSandbox {
   }
 
   private async executePython(request: CodeExecutionRequest): Promise<CodeExecutionResult> {
-    const sessionId = uuidv4();
-    const scriptPath = path.join(this.tempDir, `script_${sessionId}.py`);
+    if (!this.mainWindow) {
+      return {
+        success: false,
+        output: '',
+        error: 'No main window available for Python execution',
+        executionTime: 0,
+        memoryUsed: 0,
+      };
+    }
+
+    const timeout = request.timeout || 10000;
     
     try {
-      // Write code to temporary file
-      fs.writeFileSync(scriptPath, request.code);
-      
-      // Create restricted Python environment
-      const timeout = request.timeout || 10000; // 10 seconds default
-      const memoryLimit = request.memoryLimit || 256; // 256MB default
-      
-      return new Promise<CodeExecutionResult>((resolve) => {
-        let output = '';
-        let errorOutput = '';
-        const startTime = Date.now();
-        
-        // Execute Python with restrictions
-        const pythonProcess = spawn('python3', [
-          '-u', // Unbuffered output
-          '-c', `
-import sys
-import os
-import resource
-import signal
-
-# Set memory limit (in bytes)
-try:
-    resource.setrlimit(resource.RLIMIT_AS, (${memoryLimit} * 1024 * 1024, ${memoryLimit} * 1024 * 1024))
-except:
-    pass
-
-# Set timeout
-signal.alarm(${Math.floor(timeout / 1000)})
-
-# Restrict imports
-import builtins
-original_import = builtins.__import__
-
-dangerous_modules = {
-    'os', 'sys', 'subprocess', 'socket', 'urllib', 'http', 'ftplib', 
-    'smtplib', 'telnetlib', 'webbrowser', 'ctypes', 'multiprocessing',
-    'threading', 'asyncio', 'importlib', 'pkgutil', 'runpy', 'ast',
-    'marshal', 'pickle', 'shelve', 'dbm', 'sqlite3', 'pathlib'
-}
-
-def restricted_import(name, *args, **kwargs):
-    if name in dangerous_modules:
-        raise ImportError(f"Import of '{name}' is restricted in sandbox")
-    if name.startswith('_'):
-        raise ImportError(f"Import of private modules is restricted")
-    return original_import(name, *args, **kwargs)
-
-builtins.__import__ = restricted_import
-
-# Execute the user code
-try:
-    with open('${scriptPath}', 'r') as f:
-        code = f.read()
-    exec(code)
-except Exception as e:
-    print(f"Error: {e}", file=sys.stderr)
-    sys.exit(1)
-          `,
-        ], {
-          cwd: this.tempDir,
-          env: {
-            ...process.env,
-            PYTHONPATH: '', // Clear Python path
-            PYTHONDONTWRITEBYTECODE: '1', // Don't write .pyc files
-          },
-          timeout: timeout,
-        });
-        
-        pythonProcess.stdout?.on('data', (data) => {
-          output += data.toString();
-        });
-        
-        pythonProcess.stderr?.on('data', (data) => {
-          errorOutput += data.toString();
-        });
-        
-        pythonProcess.on('close', (code) => {
-          const executionTime = Date.now() - startTime;
-          
-          // Clean up temporary file
+      // Execute Python in renderer process via IPC
+      const result = await this.mainWindow.webContents.executeJavaScript(`
+        (async () => {
           try {
-            fs.unlinkSync(scriptPath);
-          } catch (e) {
-            console.warn('Failed to clean up temporary file:', e);
-          }
-          
-          if (code === 0) {
-            resolve({
+            // Initialize Pyodide if not already loaded
+            if (!window.pyodide) {
+              // Load Pyodide via script tag method
+              if (!window.loadPyodide) {
+                await new Promise((resolve, reject) => {
+                  const script = document.createElement('script');
+                  script.src = 'https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js';
+                  script.onload = resolve;
+                  script.onerror = reject;
+                  document.head.appendChild(script);
+                });
+              }
+              
+              window.pyodide = await window.loadPyodide({
+                indexURL: "https://cdn.jsdelivr.net/pyodide/v0.24.1/full/"
+              });
+              
+              // Load common scientific packages
+              await window.pyodide.loadPackage(["numpy", "pandas", "matplotlib"]);
+              
+              // Set up output capture
+              window.pyodide.runPython(\`
+import sys
+from io import StringIO
+
+_stdout_capture = StringIO()
+_original_stdout = sys.stdout
+
+class OutputCapture:
+    def write(self, text):
+        _stdout_capture.write(text)
+        _original_stdout.write(text)
+    def flush(self):
+        _stdout_capture.flush()
+        _original_stdout.flush()
+
+sys.stdout = OutputCapture()
+              \`);
+            }
+            
+            // Clear previous output
+            window.pyodide.runPython(\`
+_stdout_capture.seek(0)
+_stdout_capture.truncate(0)
+            \`);
+            
+            // Execute user code
+            const result = window.pyodide.runPython(\`${request.code.replace(/`/g, '\\\\`')}\`);
+            const output = window.pyodide.runPython('_stdout_capture.getvalue()');
+            
+            // Format final output
+            let finalOutput = output || '';
+            if (result !== undefined && result !== null && String(result) !== '') {
+              finalOutput += (finalOutput ? '\\\\n' : '') + String(result);
+            }
+            
+            return {
               success: true,
-              output: output.trim(),
-              error: errorOutput ? errorOutput.trim() : undefined,
-              executionTime,
-              memoryUsed: 0, // Python memory usage is harder to track
-            });
-          } else {
-            resolve({
+              output: finalOutput,
+              error: undefined
+            };
+            
+          } catch (error) {
+            // Try to get any captured output even on error
+            let output = '';
+            try {
+              if (window.pyodide) {
+                output = window.pyodide.runPython('_stdout_capture.getvalue()') || '';
+              }
+            } catch (e) {
+              // Ignore capture errors
+            }
+            
+            return {
               success: false,
-              output: output.trim(),
-              error: errorOutput.trim() || `Process exited with code ${code}`,
-              executionTime,
-              memoryUsed: 0,
-            });
+              output: output,
+              error: error.message
+            };
           }
-        });
-        
-        pythonProcess.on('error', (error) => {
-          resolve({
-            success: false,
-            output: output.trim(),
-            error: `Process error: ${error.message}`,
-            executionTime: Date.now() - startTime,
-            memoryUsed: 0,
-          });
-        });
-      });
+        })()
+      `);
+      
+      return {
+        success: result.success,
+        output: result.output || '',
+        error: result.error,
+        executionTime: 0, // We'll calculate this on the main process side
+        memoryUsed: 0,
+      };
+      
     } catch (error) {
-      // Clean up on error
-      try {
-        fs.unlinkSync(scriptPath);
-      } catch (e) {
-        // Ignore cleanup errors
-      }
-      throw error;
+      return {
+        success: false,
+        output: '',
+        error: `Python execution failed: ${(error as Error).message}`,
+        executionTime: 0,
+        memoryUsed: 0,
+      };
     }
   }
 
   public dispose(): void {
-    // Clean up temporary directory
-    try {
-      if (fs.existsSync(this.tempDir)) {
-        const files = fs.readdirSync(this.tempDir);
-        for (const file of files) {
-          fs.unlinkSync(path.join(this.tempDir, file));
-        }
-        fs.rmdirSync(this.tempDir);
-      }
-    } catch (error) {
-      console.warn('Failed to clean up code execution temp directory:', error);
-    }
+    // Clean up references
+    this.mainWindow = null;
   }
 }

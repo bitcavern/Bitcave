@@ -1,8 +1,14 @@
-import type { AIToolResponse, WindowType, CodeExecutionRequest } from "@/shared/types";
+import type {
+  AIToolResponse,
+  WindowType,
+  CodeExecutionRequest,
+} from "@/shared/types";
 import type { WindowManager } from "../window-manager";
 import { BrowserWindow } from "electron";
 import { WINDOW_CONFIGS } from "@/shared/constants";
 import { CodeExecutionSandbox } from "../code-execution/sandbox";
+import * as cheerio from "cheerio";
+import TurndownService from "turndown";
 
 export interface AITool {
   name: string;
@@ -15,11 +21,26 @@ export class AIToolRegistry {
   private tools: Map<string, AITool> = new Map();
   private windowManager: WindowManager;
   private codeExecutionSandbox: CodeExecutionSandbox;
+  private mainWindow: BrowserWindow | null = null;
+  private multiStepPlans: Map<
+    string,
+    {
+      task: string;
+      steps: string[];
+      currentStep: number;
+      results: any[];
+    }
+  > = new Map();
 
   constructor(windowManager: WindowManager) {
     this.windowManager = windowManager;
     this.codeExecutionSandbox = new CodeExecutionSandbox();
     this.registerDefaultTools();
+  }
+
+  public setMainWindow(mainWindow: BrowserWindow): void {
+    this.mainWindow = mainWindow;
+    this.codeExecutionSandbox.setMainWindow(mainWindow);
   }
 
   public registerTool(tool: AITool): void {
@@ -125,6 +146,39 @@ export class AIToolRegistry {
           params?.config,
           issues
         );
+
+        // Ensure proper labeling for all window types
+        if (
+          !sanitized.title ||
+          sanitized.title === `${type[0].toUpperCase()}${type.slice(1)} Window`
+        ) {
+          const generateUntitledLabel = (windowType: WindowType): string => {
+            const existingWindows =
+              this.windowManager.getWindowsByType(windowType);
+            let index = 1;
+            let proposedName = `Untitled ${index}`;
+
+            // Find the next available number
+            while (
+              existingWindows.some(
+                (w) =>
+                  w.title === proposedName || w.metadata?.label === proposedName
+              )
+            ) {
+              index++;
+              proposedName = `Untitled ${index}`;
+            }
+
+            return proposedName;
+          };
+
+          const untitledLabel = generateUntitledLabel(type);
+          sanitized.title = untitledLabel;
+          sanitized.metadata = {
+            ...sanitized.metadata,
+            label: untitledLabel,
+          };
+        }
 
         const window = await this.windowManager.createWindow(type, sanitized);
 
@@ -443,9 +497,33 @@ export class AIToolRegistry {
       execute: async (params) => {
         const issues: string[] = [];
 
-        const safeLabel = this.safeString(params?.label, "Untitled", issues, {
-          field: "label",
-        });
+        // Generate numbered untitled labels
+        const generateUntitledLabel = (): string => {
+          const textWindows = this.windowManager.getWindowsByType("text");
+          let index = 1;
+          let proposedName = `Untitled ${index}`;
+
+          // Find the next available number
+          while (
+            textWindows.some(
+              (w) =>
+                w.title === proposedName || w.metadata?.label === proposedName
+            )
+          ) {
+            index++;
+            proposedName = `Untitled ${index}`;
+          }
+
+          return proposedName;
+        };
+
+        const safeLabel =
+          params?.label && String(params.label).trim()
+            ? this.safeString(params.label, "Untitled", issues, {
+                field: "label",
+              })
+            : generateUntitledLabel();
+
         const safeContent = this.safeString(params?.content, "", issues, {
           field: "content",
         });
@@ -657,75 +735,175 @@ export class AIToolRegistry {
     // Code Execution Tool
     this.registerTool({
       name: "executeCode",
-      description: "Execute Python or JavaScript code in a secure sandbox environment. This tool automatically creates a code execution window (if needed), fills it with your code, runs the code, and returns the output. Perfect for running calculations, data processing, or testing code snippets.",
+      description:
+        "Execute Python or JavaScript code in a secure sandbox environment. This tool automatically creates a code execution window (if needed), fills it with your code, runs the code, and returns the output. Perfect for running calculations, data processing, or testing code snippets.",
       parameters: {
         language: {
           type: "string",
           required: true,
-          description: "Programming language to execute: 'python' or 'javascript'",
+          description:
+            "Programming language to execute: 'python' or 'javascript'",
         },
         code: {
-          type: "string", 
+          type: "string",
           required: true,
           description: "The code to execute. Can be multiple lines.",
         },
         description: {
           type: "string",
           required: false,
-          description: "Optional description of what the code does (will be used as window title)",
+          description:
+            "Optional description of what the code does (will be used as window title)",
         },
       },
       execute: async (params) => {
         // Validate language
         const language = params.language?.toLowerCase();
-        if (!language || !['python', 'javascript', 'js'].includes(language)) {
+        if (!language || !["python", "javascript", "js"].includes(language)) {
           throw new Error("Language must be 'python' or 'javascript'");
         }
-        
+
         // Normalize language
-        const normalizedLanguage = (language === 'js') ? 'javascript' : language;
-        
+        const normalizedLanguage = language === "js" ? "javascript" : language;
+
         // Validate code
         const code = params.code;
-        if (!code || typeof code !== 'string' || !code.trim()) {
+        if (!code || typeof code !== "string" || !code.trim()) {
           throw new Error("Code is required and must be a non-empty string");
         }
-        
+
         // Create execution request
         const request: CodeExecutionRequest = {
-          language: normalizedLanguage as 'python' | 'javascript',
+          language: normalizedLanguage as "python" | "javascript",
           code: code.trim(),
-          timeout: normalizedLanguage === 'python' ? 10000 : 5000, // 10s for Python, 5s for JS
-          memoryLimit: normalizedLanguage === 'python' ? 256 : 128, // 256MB for Python, 128MB for JS
+          timeout: normalizedLanguage === "python" ? 10000 : 5000, // 10s for Python, 5s for JS
+          memoryLimit: normalizedLanguage === "python" ? 256 : 128, // 256MB for Python, 128MB for JS
         };
-        
+
         // Execute code
         const result = await this.codeExecutionSandbox.executeCode(request);
-        
-        // Create code execution window to display the results
-        const title = params.description || `${normalizedLanguage} execution`;
-        const window = await this.windowManager.createWindow("code-execution", {
-          title,
-          metadata: {
-            code: request.code,
-            language: request.language,
-            lastExecution: {
-              request,
-              result,
-              timestamp: new Date().toISOString(),
-            },
-            history: [{
+
+        // Generate smart label from code content
+        const generateLabel = (
+          code: string,
+          language: string,
+          description?: string
+        ): string => {
+          if (description) return description;
+
+          // Extract meaningful information from code
+          const firstLine = code.trim().split("\n")[0];
+          const codeSnippet =
+            firstLine.length > 40
+              ? firstLine.substring(0, 37) + "..."
+              : firstLine;
+
+          // Look for common patterns
+          if (code.includes("import ") || code.includes("from ")) {
+            return `${language} Analysis`;
+          } else if (
+            code.includes("plot") ||
+            code.includes("graph") ||
+            code.includes("chart")
+          ) {
+            return `${language} Visualization`;
+          } else if (code.includes("def ") || code.includes("function ")) {
+            return `${language} Function`;
+          } else if (
+            codeSnippet.includes("print") ||
+            codeSnippet.includes("console.log")
+          ) {
+            return `${language} Output`;
+          } else {
+            return `${language}: ${codeSnippet}`;
+          }
+        };
+
+        // Check for existing code execution window or create new one
+        const existingCodeWindows =
+          this.windowManager.getWindowsByType("code-execution");
+        let window;
+
+        if (existingCodeWindows.length > 0) {
+          // Reuse the most recent code execution window
+          window = existingCodeWindows[existingCodeWindows.length - 1];
+
+          // Update the window with new code and results
+          const label = generateLabel(
+            request.code,
+            normalizedLanguage.charAt(0).toUpperCase() +
+              normalizedLanguage.slice(1),
+            params.description
+          );
+          const updatedHistory = [
+            {
               id: Date.now().toString(),
               request,
               result,
               timestamp: new Date(),
-            }],
-          },
-        });
-        
-        this.triggerWindowCreated(window);
-        
+            },
+            ...(window.metadata?.history || []).slice(0, 9), // Keep last 10 executions
+          ];
+
+          await this.windowManager.updateWindow(window.id, {
+            title: label,
+            metadata: {
+              ...window.metadata,
+              label: label,
+              code: request.code,
+              language: request.language,
+              lastExecution: {
+                request,
+                result,
+                timestamp: new Date().toISOString(),
+              },
+              history: updatedHistory,
+            },
+          });
+
+          // Get the updated window
+          window = await this.windowManager.getWindow(window.id);
+
+          // Trigger window updated event so frontend refreshes
+          this.triggerWindowUpdated(window);
+        } else {
+          // Create new code execution window
+          const label = generateLabel(
+            request.code,
+            normalizedLanguage.charAt(0).toUpperCase() +
+              normalizedLanguage.slice(1),
+            params.description
+          );
+          window = await this.windowManager.createWindow("code-execution", {
+            title: label,
+            metadata: {
+              label: label,
+              code: request.code,
+              language: request.language,
+              lastExecution: {
+                request,
+                result,
+                timestamp: new Date().toISOString(),
+              },
+              history: [
+                {
+                  id: Date.now().toString(),
+                  request,
+                  result,
+                  timestamp: new Date(),
+                },
+              ],
+            },
+          });
+
+          this.triggerWindowCreated(window);
+        }
+
         // Return execution result with window info
+        if (!window) {
+          throw new Error("Failed to create or update code execution window");
+        }
+
         return {
           success: result.success,
           output: result.output,
@@ -739,6 +917,322 @@ export class AIToolRegistry {
       },
     });
 
+    // Web Content Parser Tool
+    this.registerTool({
+      name: "parseWebviewContent",
+      description:
+        "Parse and extract readable content from a webview window. This tool fetches the HTML content from a webview, removes scripts and styles, and converts it to clean markdown text that can be easily read and analyzed.",
+      parameters: {
+        windowId: {
+          type: "string",
+          required: true,
+          description: "ID of the webview window to parse",
+        },
+      },
+      execute: async (params) => {
+        const window = this.windowManager.getWindow(params.windowId);
+        if (!window) {
+          throw new Error(`Window with id ${params.windowId} not found`);
+        }
+
+        if (window.type !== "webview" && window.type !== "reference-webview") {
+          throw new Error(`Window ${params.windowId} is not a webview window`);
+        }
+
+        const url = window.metadata?.url;
+        if (!url) {
+          throw new Error(`Webview window ${params.windowId} has no URL set`);
+        }
+
+        try {
+          // Get the HTML content directly from the BrowserView
+          const { bitcaveApp } = require("../main");
+          const webviewManager = bitcaveApp?.getWebviewManager();
+          if (!webviewManager) {
+            throw new Error("Webview manager not available");
+          }
+
+          const html = await webviewManager.getWebviewContent(params.windowId);
+
+          // Parse HTML with cheerio
+          const $ = cheerio.load(html);
+
+          // Remove only truly non-content elements
+          $("script").remove();
+          $("style").remove();
+          $("noscript").remove();
+          $("iframe").remove();
+          $("svg").remove(); // Remove SVG icons that might clutter content
+
+          // Remove only obvious ad containers, not content that might have "ad" in class names
+          $('[class*="advertisement"]').remove();
+          $('[class*="adsense"]').remove();
+          $('[class*="google-ad"]').remove();
+          $('[id*="google-ad"]').remove();
+          $('[id*="adsense"]').remove();
+
+          // Get the cleaned HTML - prefer body content, fallback to full HTML
+          const cleanedHtml = $("body").html() || $("html").html() || html;
+
+          // Convert to markdown with more content preservation
+          const turndownService = new TurndownService({
+            headingStyle: "atx",
+            codeBlockStyle: "fenced",
+            emDelimiter: "*",
+            bulletListMarker: "-",
+            strongDelimiter: "**",
+            linkStyle: "inlined",
+            linkReferenceStyle: "full",
+          });
+
+          // Configure turndown to handle common elements
+          turndownService.addRule("codeBlocks", {
+            filter: ["pre"],
+            replacement: function (content, node) {
+              const element = node as HTMLElement;
+              const firstChild = element.children?.[0] as HTMLElement;
+              const code =
+                firstChild?.tagName === "code"
+                  ? firstChild.textContent || ""
+                  : content;
+              const language =
+                firstChild?.className?.match(/language-(\w+)/)?.[1] || "";
+              return `\n\`\`\`${language}\n${code}\n\`\`\`\n\n`;
+            },
+          });
+
+          const markdown = turndownService.turndown(cleanedHtml);
+
+          // Minimal markdown cleaning - preserve most content
+          const cleanedMarkdown = markdown
+            .replace(/\n{4,}/g, "\n\n\n") // Only remove excessive newlines (4+ becomes 3)
+            .replace(/^\s+|\s+$/g, ""); // Trim whitespace
+          // Preserve all links, formatting, and content structure
+
+          const output = cleanedMarkdown;
+
+          return {
+            windowId: window.id,
+            url: url,
+            title: window.title,
+            format: "markdown",
+            content: output,
+            contentLength: output.length,
+            originalLength: html.length,
+            timestamp: new Date().toISOString(),
+          };
+        } catch (error) {
+          throw new Error(
+            `Failed to parse webview content: ${(error as Error).message}`
+          );
+        }
+      },
+    });
+
+    // Set Webview URL Tool
+    this.registerTool({
+      name: "setWebviewUrl",
+      description:
+        "Set the URL for a webview window to navigate to a specific webpage",
+      parameters: {
+        windowId: {
+          type: "string",
+          required: true,
+          description: "ID of the webview window",
+        },
+        url: {
+          type: "string",
+          required: true,
+          description: "URL to navigate to",
+        },
+      },
+      execute: async (params) => {
+        const window = this.windowManager.getWindow(params.windowId);
+        if (!window) {
+          throw new Error(`Window with id ${params.windowId} not found`);
+        }
+
+        if (window.type !== "webview" && window.type !== "reference-webview") {
+          throw new Error(`Window ${params.windowId} is not a webview window`);
+        }
+
+        // Validate URL
+        let url = params.url;
+        if (!url.startsWith("http://") && !url.startsWith("https://")) {
+          url = "https://" + url;
+        }
+
+        try {
+          new URL(url);
+        } catch {
+          throw new Error(`Invalid URL: ${params.url}`);
+        }
+
+        // Update window metadata with the URL
+        const updated = await this.windowManager.updateWindow(params.windowId, {
+          metadata: {
+            ...window.metadata,
+            url: url,
+            lastLoaded: new Date().toISOString(),
+          },
+        });
+
+        // Load the URL in the webview manager
+        try {
+          const { bitcaveApp } = require("../main");
+          const webviewManager = bitcaveApp?.getWebviewManager();
+          if (webviewManager) {
+            // Create the webview if it doesn't exist
+            const existingWebview = webviewManager.getWebview(params.windowId);
+            if (!existingWebview) {
+              await webviewManager.createWebview(params.windowId, url);
+            } else {
+              await webviewManager.loadURL(params.windowId, url);
+            }
+          }
+        } catch (error) {
+          console.error("Failed to load URL in webview manager:", error);
+        }
+
+        this.triggerWindowUpdated(updated);
+        return updated;
+      },
+    });
+
+    // Multi-Step Planning Tool
+    this.registerTool({
+      name: "multiStepPlan",
+      description:
+        "Create a multi-step plan for complex tasks that require multiple tool calls. Use this when you need to break down a complex task into sequential steps.",
+      parameters: {
+        task: {
+          type: "string",
+          required: true,
+          description: "The task to create a plan for",
+        },
+        steps: {
+          type: "array",
+          required: true,
+          description: "Array of step descriptions",
+        },
+      },
+      execute: async (params) => {
+        const planId = `plan_${Date.now()}_${Math.random()
+          .toString(36)
+          .substr(2, 9)}`;
+
+        // Store the plan
+        this.multiStepPlans.set(planId, {
+          task: params.task,
+          steps: params.steps,
+          currentStep: 0,
+          results: [],
+        });
+
+        // Return the first step
+        const plan = this.multiStepPlans.get(planId)!;
+        const currentStep = plan.steps[0];
+
+        const response = {
+          planId: planId,
+          task: plan.task,
+          totalSteps: plan.steps.length,
+          currentStep: 1,
+          nextStep: currentStep,
+          message: `Plan created with ${plan.steps.length} steps. Here's step 1: ${currentStep}`,
+        };
+
+        // Validate response is serializable
+        try {
+          JSON.stringify(response);
+        } catch (error) {
+          console.error(
+            "[AIToolRegistry] Multi-step plan response not serializable:",
+            error
+          );
+          throw new Error("Failed to create serializable plan response");
+        }
+
+        return response;
+      },
+    });
+
+    // Multi-Step Execution Tool (internal)
+    this.registerTool({
+      name: "executeNextStep",
+      description:
+        "Execute the next step in a multi-step plan and return the next step",
+      parameters: {
+        planId: {
+          type: "string",
+          required: true,
+          description: "ID of the plan to execute",
+        },
+        stepResult: {
+          type: "string",
+          required: false,
+          description: "Result from the previous step",
+        },
+      },
+      execute: async (params) => {
+        const plan = this.multiStepPlans.get(params.planId);
+        if (!plan) {
+          throw new Error(`Plan with id ${params.planId} not found`);
+        }
+
+        // Store the result from the previous step
+        if (params.stepResult) {
+          plan.results.push(params.stepResult);
+        }
+
+        // Move to next step
+        plan.currentStep++;
+
+        if (plan.currentStep >= plan.steps.length) {
+          // Plan completed
+          const completedPlan = {
+            planId: params.planId,
+            task: plan.task,
+            totalSteps: plan.steps.length,
+            completedSteps: plan.steps,
+            results: plan.results,
+            message: "All steps completed successfully!",
+          };
+
+          // Clean up the plan
+          this.multiStepPlans.delete(params.planId);
+
+          return completedPlan;
+        } else {
+          // Return next step
+          const nextStep = plan.steps[plan.currentStep];
+          const response = {
+            planId: params.planId,
+            task: plan.task,
+            totalSteps: plan.steps.length,
+            currentStep: plan.currentStep + 1,
+            nextStep: nextStep,
+            previousResult: params.stepResult,
+            message: `Step ${plan.currentStep} completed. Here's step ${
+              plan.currentStep + 1
+            }: ${nextStep}`,
+          };
+
+          // Validate response is serializable
+          try {
+            JSON.stringify(response);
+          } catch (error) {
+            console.error(
+              "[AIToolRegistry] Execute next step response not serializable:",
+              error
+            );
+            throw new Error("Failed to create serializable step response");
+          }
+
+          return response;
+        }
+      },
+    });
   }
 
   private triggerWindowCreated(window: any): void {
@@ -912,5 +1406,34 @@ export class AIToolRegistry {
       issues.push(`${field} not JSON-serializable; replaced with {}`);
       return {};
     }
+  }
+
+  private markdownToText(markdown: string): string {
+    return (
+      markdown
+        // Remove headers
+        .replace(/^#{1,6}\s+.*$/gm, "")
+        // Remove code blocks
+        .replace(/```[\s\S]*?```/g, "")
+        // Remove inline code
+        .replace(/`([^`]+)`/g, "$1")
+        // Remove links, keep text
+        .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+        // Remove bold and italic
+        .replace(/\*\*([^*]+)\*\*/g, "$1")
+        .replace(/\*([^*]+)\*/g, "$1")
+        // Remove strikethrough
+        .replace(/~~([^~]+)~~/g, "$1")
+        // Remove blockquotes
+        .replace(/^>\s+.*$/gm, "")
+        // Remove list markers
+        .replace(/^[\s]*[-*+]\s+/gm, "")
+        .replace(/^[\s]*\d+\.\s+/gm, "")
+        // Remove horizontal rules
+        .replace(/^[\s]*[-*_]{3,}[\s]*$/gm, "")
+        // Clean up whitespace
+        .replace(/\n{3,}/g, "\n\n")
+        .replace(/^\s+|\s+$/g, "")
+    );
   }
 }

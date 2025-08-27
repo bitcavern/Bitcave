@@ -18,12 +18,18 @@ export const Canvas: React.FC<CanvasProps> = ({
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [lastViewport, setLastViewport] = useState(state.viewport);
 
-  // Handle mouse wheel for zooming
+  // Handle mouse wheel for zooming (only with cmd/ctrl pressed, slower speed)
   const handleWheel = useCallback(
     (event: WheelEvent) => {
+      // Only zoom when cmd/ctrl is pressed
+      if (!event.ctrlKey && !event.metaKey) {
+        return; // Allow normal scrolling
+      }
+
       event.preventDefault();
 
-      const zoomFactor = event.deltaY > 0 ? 0.9 : 1.1;
+      // Slower zoom factor for more precise control
+      const zoomFactor = event.deltaY > 0 ? 0.95 : 1.05;
       const newZoom = Math.max(
         APP_CONFIG.canvasDefaults.minZoom,
         Math.min(
@@ -62,12 +68,18 @@ export const Canvas: React.FC<CanvasProps> = ({
   const handleMouseDown = useCallback(
     (event: React.MouseEvent) => {
       const target = event.target as HTMLElement;
-      const onCanvas =
-        target === canvasRef.current || target.classList.contains("canvas");
-      const isPanButton =
-        event.button === 0 || event.button === 1 || event.button === 2; // middle/right
-      const shouldPan = isPanButton || (event.button === 0 && onCanvas);
-      if (shouldPan) {
+      
+      // Only start dragging if clicking directly on the canvas background
+      // Check if target is the canvas itself or has 'canvas' class
+      const isCanvas = target === canvasRef.current || target.classList.contains("canvas");
+      const isCanvasChild = target.closest('[data-canvas-background]') === canvasRef.current;
+      const onCanvasBackground = isCanvas || isCanvasChild;
+      
+      // Don't interfere with window interactions - only pan on background clicks
+      const isWindowElement = target.closest('.window') !== null;
+      
+      if (onCanvasBackground && !isWindowElement && event.button === 0) {
+        event.preventDefault();
         setIsDragging(true);
         setDragStart({ x: event.clientX, y: event.clientY });
         setLastViewport(state.viewport);
@@ -98,7 +110,7 @@ export const Canvas: React.FC<CanvasProps> = ({
     setIsDragging(false);
   }, []);
 
-  // Spacebar panning removed to avoid interfering with typing in the AI sidebar
+  // Spacebar panning removed to avoid interfering with typing in the Bit sidebar
 
   // Set up event listeners
   useEffect(() => {
@@ -125,6 +137,7 @@ export const Canvas: React.FC<CanvasProps> = ({
     <div
       ref={canvasRef}
       className="canvas"
+      data-canvas-background
       onMouseDown={handleMouseDown}
       style={{
         width: "100%",
@@ -166,12 +179,35 @@ export const Canvas: React.FC<CanvasProps> = ({
           borderRadius: "4px",
           fontSize: "12px",
           fontFamily: "monospace",
-          pointerEvents: "none",
           userSelect: "none",
+          display: "flex",
+          alignItems: "center",
+          gap: "8px",
         }}
       >
-        Zoom: {Math.round(state.viewport.zoom * 100)}% | X:{" "}
-        {Math.round(state.viewport.x)} | Y: {Math.round(state.viewport.y)}
+        <span>Zoom:</span>
+        <button
+          onClick={() => {
+            onViewportChange({
+              ...state.viewport,
+              zoom: 1.0,
+            });
+          }}
+          style={{
+            background: "none",
+            border: "none",
+            color: "white",
+            cursor: "pointer",
+            fontSize: "12px",
+            fontFamily: "monospace",
+            textDecoration: state.viewport.zoom !== 1.0 ? "underline" : "none",
+            padding: 0,
+          }}
+          title="Click to reset zoom to 100%"
+        >
+          {Math.round(state.viewport.zoom * 100)}%
+        </button>
+        <span>| X: {Math.round(state.viewport.x)} | Y: {Math.round(state.viewport.y)}</span>
       </div>
     </div>
   );

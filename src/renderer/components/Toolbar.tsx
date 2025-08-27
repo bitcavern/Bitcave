@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import type { CanvasState, WindowType } from "@/shared/types";
+import type { CanvasState, WindowType, BaseWindow } from "@/shared/types";
 import { WINDOW_CONFIGS } from "@/shared/constants";
 
 interface ToolbarProps {
@@ -7,6 +7,8 @@ interface ToolbarProps {
   selectedWindowId: string | null;
   windowCount: number;
   canvasState: CanvasState;
+  windows: BaseWindow[];
+  onRestoreWindow?: (windowId: string) => void;
 }
 
 export const Toolbar: React.FC<ToolbarProps> = ({
@@ -14,8 +16,35 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   selectedWindowId,
   windowCount,
   canvasState,
+  windows,
+  onRestoreWindow,
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [showMinimized, setShowMinimized] = useState(false);
+
+  const selectedWindow = selectedWindowId
+    ? windows.find((w) => w.id === selectedWindowId)
+    : null;
+  const minimizedWindows = windows.filter((w) => w.isMinimized);
+  const openWindows = windows.filter((w) => !w.isMinimized);
+  const totalWindows = windows.length;
+
+  const getWindowLabel = (window: BaseWindow): string => {
+    // Try to get label from metadata first
+    if (window.metadata?.label && typeof window.metadata.label === "string") {
+      return window.metadata.label;
+    }
+
+    // Fall back to title
+    if (window.title && window.title !== "Untitled Window") {
+      return window.title;
+    }
+
+    // Generate untitled label with number
+    const sameTypeWindows = windows.filter((w) => w.type === window.type);
+    const index = sameTypeWindows.findIndex((w) => w.id === window.id) + 1;
+    return `Untitled ${index}`;
+  };
 
   const windowTypes: { type: WindowType; label: string }[] = [
     { type: "text", label: "Text Document" },
@@ -23,7 +52,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
     { type: "reference-webview", label: "Reference" },
     { type: "markdown-editor", label: "Markdown" },
     { type: "graph", label: "Graph" },
-    { type: "chat", label: "AI Chat" },
+    { type: "chat", label: "Bit Chat" },
     { type: "code-execution", label: "Code" },
     { type: "artifact", label: "Artifact" },
     { type: "file-explorer", label: "Files" },
@@ -160,20 +189,243 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             gap: "16px",
             color: "#d1d5db",
             fontSize: "12px",
-            fontFamily: "monospace",
+            fontFamily: "system-ui, -apple-system, sans-serif",
           }}
         >
-          <span>Windows: {windowCount}</span>
-          <span>Zoom: {Math.round(canvasState.viewport.zoom * 100)}%</span>
-          {selectedWindowId && (
-            <span style={{ color: "#3b82f6" }}>
-              Selected: {selectedWindowId.slice(0, 8)}...
+          <div style={{ position: "relative" }}>
+            <button
+              onClick={() => setShowMinimized(!showMinimized)}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+                padding: "4px 10px",
+                backgroundColor: "#374151",
+                color: "#f9fafb",
+                border: "none",
+                borderRadius: "6px",
+                cursor: "pointer",
+                fontSize: "12px",
+                fontWeight: "500",
+                transition: "background-color 0.2s",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = "#4b5563";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = "#374151";
+              }}
+            >
+              <span>
+                Windows {openWindows.length}/{totalWindows}
+              </span>
+              <span
+                style={{
+                  transform: showMinimized ? "rotate(180deg)" : "rotate(0deg)",
+                  transition: "transform 0.2s",
+                }}
+              >
+                ▼
+              </span>
+            </button>
+
+            {/* Unified windows dropdown */}
+            {showMinimized && (
+              <div
+                style={{
+                  position: "absolute",
+                  top: "100%",
+                  left: 0,
+                  marginTop: "8px",
+                  backgroundColor: "#374151",
+                  border: "1px solid #4b5563",
+                  borderRadius: "8px",
+                  boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.3)",
+                  minWidth: "240px",
+                  zIndex: 1000,
+                  maxHeight: "400px",
+                  overflowY: "auto",
+                }}
+              >
+                {/* Minimized windows section */}
+                {minimizedWindows.length > 0 && (
+                  <>
+                    <div
+                      style={{
+                        padding: "8px 16px",
+                        fontSize: "11px",
+                        fontWeight: "600",
+                        color: "#9ca3af",
+                        borderBottom: "1px solid #4b5563",
+                      }}
+                    >
+                      MINIMIZED ({minimizedWindows.length})
+                    </div>
+                    <div style={{ padding: "4px 0" }}>
+                      {minimizedWindows.map((window) => {
+                        const config = WINDOW_CONFIGS[window.type];
+                        return (
+                          <button
+                            key={window.id}
+                            onClick={() => {
+                              if (onRestoreWindow) {
+                                onRestoreWindow(window.id);
+                              }
+                              setShowMinimized(false);
+                            }}
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "12px",
+                              width: "100%",
+                              padding: "8px 16px",
+                              backgroundColor: "transparent",
+                              color: "#f9fafb",
+                              border: "none",
+                              cursor: "pointer",
+                              fontSize: "13px",
+                              textAlign: "left",
+                              transition: "background-color 0.2s",
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.backgroundColor = "#4b5563";
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.backgroundColor =
+                                "transparent";
+                            }}
+                          >
+                            <span style={{ fontSize: "14px", opacity: 0.6 }}>
+                              {config.icon}
+                            </span>
+                            <div
+                              style={{
+                                display: "flex",
+                                flexDirection: "column",
+                                gap: "2px",
+                              }}
+                            >
+                              <span style={{ fontWeight: "500", opacity: 0.8 }}>
+                                {getWindowLabel(window)}
+                              </span>
+                              <span
+                                style={{ fontSize: "11px", color: "#9ca3af" }}
+                              >
+                                {config.name}
+                              </span>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+
+                {/* Separator */}
+                {minimizedWindows.length > 0 && openWindows.length > 0 && (
+                  <div
+                    style={{
+                      height: "1px",
+                      backgroundColor: "#4b5563",
+                      margin: "4px 0",
+                    }}
+                  />
+                )}
+
+                {/* Open windows section */}
+                {openWindows.length > 0 && (
+                  <>
+                    <div
+                      style={{
+                        padding: "8px 16px",
+                        fontSize: "11px",
+                        fontWeight: "600",
+                        color: "#9ca3af",
+                        borderBottom:
+                          minimizedWindows.length > 0
+                            ? "none"
+                            : "1px solid #4b5563",
+                      }}
+                    >
+                      OPEN ({openWindows.length})
+                    </div>
+                    <div style={{ padding: "4px 0" }}>
+                      {openWindows.map((window) => {
+                        const config = WINDOW_CONFIGS[window.type];
+                        const isSelected = selectedWindowId === window.id;
+                        return (
+                          <button
+                            key={window.id}
+                            onClick={() => {
+                              // TODO: Add smooth animation to center on window
+                              setShowMinimized(false);
+                            }}
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "12px",
+                              width: "100%",
+                              padding: "8px 16px",
+                              backgroundColor: isSelected
+                                ? "#3b82f6"
+                                : "transparent",
+                              color: "#f9fafb",
+                              border: "none",
+                              cursor: "pointer",
+                              fontSize: "13px",
+                              textAlign: "left",
+                              transition: "background-color 0.2s",
+                            }}
+                            onMouseEnter={(e) => {
+                              if (!isSelected) {
+                                e.currentTarget.style.backgroundColor =
+                                  "#4b5563";
+                              }
+                            }}
+                            onMouseLeave={(e) => {
+                              if (!isSelected) {
+                                e.currentTarget.style.backgroundColor =
+                                  "transparent";
+                              }
+                            }}
+                          >
+                            <span style={{ fontSize: "14px" }}>
+                              {config.icon}
+                            </span>
+                            <div
+                              style={{
+                                display: "flex",
+                                flexDirection: "column",
+                                gap: "2px",
+                              }}
+                            >
+                              <span style={{ fontWeight: "500" }}>
+                                {getWindowLabel(window)}
+                              </span>
+                              <span
+                                style={{ fontSize: "11px", color: "#9ca3af" }}
+                              >
+                                {config.name}
+                              </span>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+          {selectedWindow && (
+            <span style={{ color: "#3b82f6", fontWeight: "500" }}>
+              Selected: {getWindowLabel(selectedWindow)}
             </span>
           )}
         </div>
 
-        {/* AI Status Indicator */}
-        <div
+        {/* Bit Status Indicator */}
+        {/* <div
           style={{
             display: "flex",
             alignItems: "center",
@@ -194,12 +446,12 @@ export const Toolbar: React.FC<ToolbarProps> = ({
               animation: "pulse 2s infinite",
             }}
           />
-          <span>AI Ready</span>
-        </div>
+          <span>Bit Ready</span>
+        </div> */}
       </div>
 
-      {/* Click outside to close dropdown */}
-      {isExpanded && (
+      {/* Click outside to close dropdowns */}
+      {(isExpanded || showMinimized) && (
         <div
           style={{
             position: "fixed",
@@ -209,7 +461,10 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             bottom: 0,
             zIndex: -1,
           }}
-          onClick={() => setIsExpanded(false)}
+          onClick={() => {
+            setIsExpanded(false);
+            setShowMinimized(false);
+          }}
         />
       )}
 

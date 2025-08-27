@@ -28,8 +28,18 @@ export const CodeExecutionWindow: React.FC<CodeExecutionWindowProps> = ({
     window.metadata?.history || []
   );
   const [currentResult, setCurrentResult] = useState<CodeExecutionResult | null>(
-    null
+    window.metadata?.lastExecution?.result || null
   );
+  
+  // Sync state when window metadata changes (e.g., from AI tool execution)
+  useEffect(() => {
+    if (window.metadata?.lastExecution?.result && !isExecuting) {
+      setCurrentResult(window.metadata.lastExecution.result);
+      setCode(window.metadata.code || code);
+      setLanguage(window.metadata.language || language);
+      setHistory(window.metadata.history || []);
+    }
+  }, [window.metadata?.lastExecution, window.metadata?.code, window.metadata?.language, window.metadata?.history, isExecuting]);
   
   // Update window metadata when state changes
   useEffect(() => {
@@ -118,119 +128,275 @@ export const CodeExecutionWindow: React.FC<CodeExecutionWindowProps> = ({
   };
 
   return (
-    <div className="flex flex-col h-full text-white" style={{ margin: '-16px', height: 'calc(100% + 32px)' }}>
+    <div 
+      style={{
+        margin: '-16px',
+        height: 'calc(100% + 32px)',
+        display: 'flex',
+        flexDirection: 'column',
+        background: 'linear-gradient(135deg, #1f2937 0%, #111827 100%)',
+        color: 'white',
+        fontFamily: 'system-ui, -apple-system, sans-serif',
+      }}
+    >
       {/* Header */}
-      <div className="flex items-center justify-between p-3 border-b border-gray-700">
-        <div className="flex items-center gap-2">
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '16px',
+        borderBottom: '1px solid #374151',
+        background: 'rgba(55, 65, 81, 0.3)',
+        backdropFilter: 'blur(10px)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <select
             value={language}
             onChange={(e) => setLanguage(e.target.value as 'python' | 'javascript')}
-            className="bg-gray-800 text-white px-2 py-1 rounded text-sm border border-gray-600"
             disabled={isExecuting}
+            style={{
+              background: '#374151',
+              color: 'white',
+              padding: '8px 12px',
+              borderRadius: '8px',
+              border: '1px solid #4b5563',
+              fontSize: '14px',
+              fontWeight: '500',
+              cursor: isExecuting ? 'not-allowed' : 'pointer',
+            }}
           >
             <option value="python">Python</option>
             <option value="javascript">JavaScript</option>
           </select>
-          <span className="text-xs text-gray-400">
-            {language === 'python' ? '🐍' : '🟡'} {language.charAt(0).toUpperCase() + language.slice(1)}
-          </span>
         </div>
         
-        <div className="flex items-center gap-2">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <button
             onClick={handleExecuteCode}
             disabled={!code.trim() || isExecuting}
-            className="px-3 py-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded text-sm font-medium transition-colors"
+            style={{
+              padding: '10px 16px',
+              background: (!code.trim() || isExecuting) ? '#4b5563' : 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              fontSize: '14px',
+              fontWeight: '600',
+              cursor: (!code.trim() || isExecuting) ? 'not-allowed' : 'pointer',
+              transition: 'all 0.2s ease',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              boxShadow: (!code.trim() || isExecuting) ? 'none' : '0 2px 8px rgba(16, 185, 129, 0.3)',
+            }}
           >
-            {isExecuting ? '▶️ Running...' : '▶️ Execute'}
+            {isExecuting ? 'Running...' : 'Execute'}
           </button>
           <button
             onClick={clearHistory}
-            className="px-3 py-1 bg-gray-600 hover:bg-gray-700 text-white rounded text-sm transition-colors"
+            style={{
+              padding: '10px 16px',
+              background: '#6b7280',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              fontSize: '14px',
+              fontWeight: '500',
+              cursor: 'pointer',
+              transition: 'background 0.2s ease',
+            }}
+            onMouseOver={(e) => e.currentTarget.style.background = '#9ca3af'}
+            onMouseOut={(e) => e.currentTarget.style.background = '#6b7280'}
           >
-            🗑️ Clear
+            Clear
           </button>
         </div>
       </div>
 
-      <div className="flex-1 flex">
-        {/* Code Editor */}
-        <div className="flex-1 flex flex-col">
-          <div className="p-2 bg-gray-800 border-b border-gray-700">
-            <span className="text-xs text-gray-400">Code</span>
+      {/* Main Content Area */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '16px', padding: '16px' }}>
+        
+        {/* Input Card */}
+        <div style={{
+          background: 'rgba(31, 41, 55, 0.8)',
+          borderRadius: '12px',
+          border: '1px solid #374151',
+          overflow: 'hidden',
+          backdropFilter: 'blur(10px)',
+          boxShadow: '0 4px 16px rgba(0, 0, 0, 0.2)',
+        }}>
+          <div style={{
+            padding: '12px 16px',
+            background: 'rgba(55, 65, 81, 0.5)',
+            borderBottom: '1px solid #374151',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}>
+            <span style={{ fontSize: '14px', fontWeight: '600', color: '#e5e7eb' }}>
+              Code Editor
+            </span>
+            <span style={{ fontSize: '12px', color: '#9ca3af' }}>
+              Ctrl+Enter to execute
+            </span>
           </div>
           <textarea
             value={code}
             onChange={(e) => setCode(e.target.value)}
             placeholder={
               language === 'python'
-                ? 'print("Hello from Python!")\n\n# Try some math:\nimport math\nprint(f"π = {math.pi:.4f}")'
-                : 'console.log("Hello from JavaScript!");\n\n// Try some math:\nconst result = Math.PI * 2;\nconsole.log(`2π = ${result.toFixed(4)}`);'
+                ? 'print("Hello from Python!")\n\n# Try some math:\nimport math\nprint(f"π = {math.pi:.4f}")\n\n# Data analysis:\nimport numpy as np\ndata = np.array([1, 2, 3, 4, 5])\nprint(f"Mean: {np.mean(data)}")'
+                : 'console.log("Hello from JavaScript!");\n\n// Try some math:\nconst result = Math.PI * 2;\nconsole.log(`2π = ${result.toFixed(4)}`);\n\n// Array operations:\nconst data = [1, 2, 3, 4, 5];\nconst sum = data.reduce((a, b) => a + b, 0);\nconsole.log(`Sum: ${sum}`);'
             }
-            className="flex-1 p-3 bg-gray-900 text-white font-mono text-sm resize-none outline-none"
             disabled={isExecuting}
             onKeyDown={(e) => {
               if (e.ctrlKey && e.key === 'Enter') {
                 handleExecuteCode();
               }
             }}
+            style={{
+              width: '100%',
+              minHeight: '200px',
+              maxHeight: '400px',
+              padding: '16px',
+              background: 'transparent',
+              color: '#f9fafb',
+              fontFamily: '"JetBrains Mono", "SF Mono", Consolas, monospace',
+              fontSize: '14px',
+              lineHeight: '1.5',
+              border: 'none',
+              outline: 'none',
+              resize: 'vertical',
+              opacity: isExecuting ? 0.6 : 1,
+            }}
           />
         </div>
 
-        {/* Output Panel */}
-        <div className="w-1/2 flex flex-col border-l border-gray-700">
-          <div className="p-2 bg-gray-800 border-b border-gray-700 flex items-center justify-between">
-            <span className="text-xs text-gray-400">Output</span>
+        {/* Output Card */}
+        <div style={{
+          background: 'rgba(31, 41, 55, 0.8)',
+          borderRadius: '12px',
+          border: '1px solid #374151',
+          overflow: 'hidden',
+          backdropFilter: 'blur(10px)',
+          boxShadow: '0 4px 16px rgba(0, 0, 0, 0.2)',
+          flex: 1,
+          minHeight: '200px',
+        }}>
+          <div style={{
+            padding: '12px 16px',
+            background: 'rgba(55, 65, 81, 0.5)',
+            borderBottom: '1px solid #374151',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}>
+            <span style={{ fontSize: '14px', fontWeight: '600', color: '#e5e7eb' }}>
+              Output
+            </span>
             {currentResult && (
-              <span className={`text-xs px-2 py-1 rounded ${
-                currentResult.success ? 'bg-green-900 text-green-300' : 'bg-red-900 text-red-300'
-              }`}>
+              <span style={{
+                fontSize: '12px',
+                padding: '4px 8px',
+                borderRadius: '6px',
+                background: currentResult.success ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+                color: currentResult.success ? '#34d399' : '#f87171',
+                border: `1px solid ${currentResult.success ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
+                fontWeight: '500',
+              }}>
                 {currentResult.success ? '✅ Success' : '❌ Error'} 
                 {currentResult.executionTime > 0 && ` (${currentResult.executionTime}ms)`}
               </span>
             )}
           </div>
           
-          {/* Current Result */}
-          <div className="flex-1 overflow-auto">
+          <div style={{ padding: '16px', height: 'calc(100% - 57px)', overflowY: 'auto' }}>
             {isExecuting && (
-              <div className="p-3 text-yellow-400">
-                <div className="flex items-center gap-2">
-                  <div className="animate-spin w-3 h-3 border border-yellow-400 border-t-transparent rounded-full"></div>
-                  Executing code...
-                </div>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                color: '#fbbf24',
+                padding: '20px',
+                justifyContent: 'center',
+              }}>
+                <div style={{
+                  width: '20px',
+                  height: '20px',
+                  border: '2px solid #fbbf24',
+                  borderTop: '2px solid transparent',
+                  borderRadius: '50%',
+                  animation: 'spin 1s linear infinite',
+                }} />
+                <span style={{ fontSize: '16px', fontWeight: '500' }}>
+                  Executing your {language} code...
+                </span>
               </div>
             )}
             
             {currentResult && !isExecuting && (
-              <div className="p-3">
+              <div>
                 {currentResult.output && (
-                  <div className="mb-3">
-                    <div className="text-xs text-gray-400 mb-1">Output:</div>
-                    <pre className="text-sm text-green-300 whitespace-pre-wrap bg-gray-800 p-2 rounded">
+                  <div style={{ marginBottom: '16px' }}>
+                    <div style={{ fontSize: '12px', color: '#9ca3af', marginBottom: '8px', fontWeight: '600' }}>
+                      Output:
+                    </div>
+                    <pre style={{
+                      fontSize: '13px',
+                      color: '#34d399',
+                      whiteSpace: 'pre-wrap',
+                      background: 'rgba(6, 78, 59, 0.3)',
+                      padding: '12px',
+                      borderRadius: '8px',
+                      border: '1px solid rgba(16, 185, 129, 0.2)',
+                      margin: 0,
+                      fontFamily: '"JetBrains Mono", "SF Mono", Consolas, monospace',
+                      lineHeight: '1.4',
+                    }}>
                       {currentResult.output}
                     </pre>
                   </div>
                 )}
                 
                 {currentResult.error && (
-                  <div className="mb-3">
-                    <div className="text-xs text-gray-400 mb-1">Error:</div>
-                    <pre className="text-sm text-red-300 whitespace-pre-wrap bg-red-950 p-2 rounded border border-red-800">
+                  <div style={{ marginBottom: '16px' }}>
+                    <div style={{ fontSize: '12px', color: '#9ca3af', marginBottom: '8px', fontWeight: '600' }}>
+                      Error:
+                    </div>
+                    <pre style={{
+                      fontSize: '13px',
+                      color: '#f87171',
+                      whiteSpace: 'pre-wrap',
+                      background: 'rgba(127, 29, 29, 0.3)',
+                      padding: '12px',
+                      borderRadius: '8px',
+                      border: '1px solid rgba(239, 68, 68, 0.3)',
+                      margin: 0,
+                      fontFamily: '"JetBrains Mono", "SF Mono", Consolas, monospace',
+                      lineHeight: '1.4',
+                    }}>
                       {currentResult.error}
                     </pre>
                   </div>
                 )}
                 
                 {currentResult.plots && currentResult.plots.length > 0 && (
-                  <div className="mb-3">
-                    <div className="text-xs text-gray-400 mb-1">Plots:</div>
+                  <div style={{ marginBottom: '16px' }}>
+                    <div style={{ fontSize: '12px', color: '#9ca3af', marginBottom: '8px', fontWeight: '600' }}>
+                      Plots:
+                    </div>
                     {currentResult.plots.map((plot, index) => (
                       <img
                         key={index}
                         src={`data:image/png;base64,${plot}`}
                         alt={`Plot ${index + 1}`}
-                        className="max-w-full h-auto rounded border border-gray-600"
+                        style={{
+                          maxWidth: '100%',
+                          height: 'auto',
+                          borderRadius: '8px',
+                          border: '1px solid #4b5563',
+                          marginBottom: '8px',
+                        }}
                       />
                     ))}
                   </div>
@@ -239,46 +405,89 @@ export const CodeExecutionWindow: React.FC<CodeExecutionWindowProps> = ({
             )}
             
             {!currentResult && !isExecuting && (
-              <div className="p-3 text-gray-500 text-center">
-                Click "Execute" to run your code
-                <br />
-                <span className="text-xs">Ctrl+Enter for quick execution</span>
+              <div style={{
+                textAlign: 'center',
+                color: '#9ca3af',
+                padding: '40px 20px',
+                fontSize: '15px',
+              }}>
+                <div style={{ fontSize: '24px', marginBottom: '8px' }}>⚡</div>
+                <div style={{ fontWeight: '500', marginBottom: '4px' }}>Ready to execute</div>
+                <div style={{ fontSize: '13px', opacity: 0.7 }}>
+                  Write your {language} code above and click Execute
+                </div>
               </div>
             )}
           </div>
         </div>
+
+        {/* History Panel */}
+        {history.length > 0 && (
+          <div style={{
+            background: 'rgba(31, 41, 55, 0.6)',
+            borderRadius: '12px',
+            border: '1px solid #374151',
+            maxHeight: '160px',
+            display: 'flex',
+            flexDirection: 'column',
+          }}>
+            <div style={{
+              padding: '12px 16px',
+              background: 'rgba(55, 65, 81, 0.3)',
+              borderBottom: '1px solid #374151',
+              fontSize: '14px',
+              fontWeight: '600',
+              color: '#e5e7eb',
+            }}>
+              Recent Executions ({history.length})
+            </div>
+            <div style={{ flex: 1, overflowY: 'auto', padding: '8px' }}>
+              {history.map((entry) => (
+                <div
+                  key={entry.id}
+                  onClick={() => loadFromHistory(entry)}
+                  style={{
+                    margin: '4px 0',
+                    padding: '8px 12px',
+                    background: 'rgba(55, 65, 81, 0.4)',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontSize: '12px',
+                    transition: 'background 0.2s ease',
+                  }}
+                  onMouseOver={(e) => e.currentTarget.style.background = 'rgba(55, 65, 81, 0.6)'}
+                  onMouseOut={(e) => e.currentTarget.style.background = 'rgba(55, 65, 81, 0.4)'}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                    <span style={{
+                      fontWeight: '500',
+                      color: entry.result.success ? '#34d399' : '#f87171'
+                    }}>
+                      {entry.request.language} • {entry.result.success ? 'Success' : 'Error'}
+                    </span>
+                    <span style={{ color: '#9ca3af', fontSize: '11px' }}>
+                      {entry.timestamp.toLocaleTimeString()}
+                    </span>
+                  </div>
+                  <div style={{ color: '#d1d5db', fontSize: '11px', fontFamily: 'monospace' }}>
+                    {entry.request.code.split('\n')[0]}
+                    {entry.request.code.split('\n').length > 1 && '...'}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* History Panel */}
-      {history.length > 0 && (
-        <div className="h-32 border-t border-gray-700 flex flex-col">
-          <div className="p-2 bg-gray-800 border-b border-gray-700">
-            <span className="text-xs text-gray-400">Execution History ({history.length})</span>
-          </div>
-          <div className="flex-1 overflow-auto p-2">
-            {history.map((entry) => (
-              <div
-                key={entry.id}
-                onClick={() => loadFromHistory(entry)}
-                className="mb-2 p-2 bg-gray-800 hover:bg-gray-700 cursor-pointer rounded text-xs transition-colors"
-              >
-                <div className="flex items-center justify-between mb-1">
-                  <span className={`font-medium ${entry.result.success ? 'text-green-400' : 'text-red-400'}`}>
-                    {entry.request.language} • {entry.result.success ? 'Success' : 'Error'}
-                  </span>
-                  <span className="text-gray-500">
-                    {entry.timestamp.toLocaleTimeString()}
-                  </span>
-                </div>
-                <div className="text-gray-300 truncate">
-                  {entry.request.code.split('\n')[0]}
-                  {entry.request.code.split('\n').length > 1 && '...'}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      <style>
+        {`
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+        `}
+      </style>
     </div>
   );
 };

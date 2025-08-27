@@ -1,9 +1,10 @@
-import { app, BrowserWindow, ipcMain } from "electron";
+import { app, BrowserWindow, ipcMain, globalShortcut } from "electron";
 import * as path from "path";
 import * as dotenv from "dotenv";
 import { WindowManager } from "./window-manager";
 import { AIToolRegistry } from "./ai-tools/registry";
 import { AIService } from "./ai/ai-service";
+import { WebviewManager } from "./webview-manager";
 
 // Load environment variables
 dotenv.config();
@@ -14,11 +15,14 @@ class BitcaveApp {
   private windowManager: WindowManager;
   private aiToolRegistry: AIToolRegistry;
   private aiService: AIService;
+  private webviewManager: WebviewManager;
+  private selectedWindowId: string | null = null;
 
   constructor() {
     this.windowManager = new WindowManager();
     this.aiToolRegistry = new AIToolRegistry(this.windowManager);
     this.aiService = new AIService(this.aiToolRegistry, this.windowManager);
+    this.webviewManager = new WebviewManager();
 
     // Initialize with environment API key if available
     const envApiKey = process.env.OPENROUTER_API_KEY;
@@ -71,6 +75,11 @@ class BitcaveApp {
     // Show window when ready
     this.mainWindow.once("ready-to-show", () => {
       this.mainWindow?.show();
+      // Pass main window to AI tool registry for Python execution
+      if (this.mainWindow) {
+        this.aiToolRegistry.setMainWindow(this.mainWindow);
+        this.webviewManager.setMainWindow(this.mainWindow);
+      }
     });
 
     // Handle window closed
@@ -111,7 +120,8 @@ class BitcaveApp {
     app.on("window-all-closed", () => {
       // Clean up resources
       this.aiToolRegistry.dispose();
-      
+      this.webviewManager.dispose();
+
       if (process.platform !== "darwin") {
         app.quit();
       }
@@ -126,7 +136,47 @@ class BitcaveApp {
     app.on("before-quit", () => {
       // Clean up resources before quitting
       this.aiToolRegistry.dispose();
+      this.webviewManager.dispose();
     });
+
+    // Setup development reset shortcut
+    this.setupResetShortcut();
+  }
+
+  private setupResetShortcut(): void {
+    // Only enable in development mode
+    if (process.env.NODE_ENV === "development") {
+      const isEnabled = process.env.ENABLE_RESET_SHORTCUT === "true";
+
+      if (isEnabled) {
+        // Register Ctrl+Shift+R (Windows/Linux) or Cmd+Shift+R (Mac)
+        const shortcut =
+          process.platform === "darwin" ? "Cmd+Shift+R" : "Ctrl+Shift+R";
+
+        const success = globalShortcut.register(shortcut, () => {
+          console.log(`[Main] Reset shortcut triggered: ${shortcut}`);
+          console.log("[Main] Restarting application...");
+
+          // Clean up resources
+          this.aiToolRegistry.dispose();
+          this.webviewManager.dispose();
+
+          // Relaunch the app
+          app.relaunch();
+          app.exit(0);
+        });
+
+        if (success) {
+          console.log(`[Main] Reset shortcut registered: ${shortcut}`);
+        } else {
+          console.log(`[Main] Failed to register reset shortcut: ${shortcut}`);
+        }
+      } else {
+        console.log(
+          "[Main] Reset shortcut disabled (set ENABLE_RESET_SHORTCUT=true to enable)"
+        );
+      }
+    }
   }
 
   private setupIPCHandlers(): void {
@@ -201,6 +251,20 @@ class BitcaveApp {
             data.windowId,
             data.size
           );
+          return { success: true, data: window };
+        } catch (error) {
+          return { success: false, error: (error as Error).message };
+        }
+      }
+    );
+
+    ipcMain.handle(
+      "window:restore",
+      async (event, data: IPCEventData<"window:restore">) => {
+        try {
+          const window = await this.windowManager.updateWindow(data.windowId, {
+            isMinimized: false,
+          });
           return { success: true, data: window };
         } catch (error) {
           return { success: false, error: (error as Error).message };
@@ -291,7 +355,8 @@ class BitcaveApp {
       "ai:get-conversation",
       async (event, conversationId: string) => {
         try {
-          const conversation = this.aiService.getConversation(conversationId);
+          const conversations = this.aiService.getConversations();
+          const conversation = conversations.find(c => c.id === conversationId);
           return { success: true, data: conversation };
         } catch (error) {
           return { success: false, error: (error as Error).message };
@@ -317,16 +382,13 @@ class BitcaveApp {
       async (event, data: IPCEventData<"code:execute">) => {
         try {
           // Use the code execution sandbox through the AI tool registry
-          const result = await this.aiToolRegistry.executeTool(
-            "executeCode",
-            {
-              language: data.language,
-              code: data.code,
-              timeout: data.timeout,
-              memoryLimit: data.memoryLimit,
-            }
-          );
-          
+          const result = await this.aiToolRegistry.executeTool("executeCode", {
+            language: data.language,
+            code: data.code,
+            timeout: data.timeout,
+            memoryLimit: data.memoryLimit,
+          });
+
           if (result.success) {
             return { success: true, data: result.data };
           } else {
@@ -337,10 +399,126 @@ class BitcaveApp {
         }
       }
     );
+
+    // Selected window handler
+    ipcMain.handle(
+      "window:set-selected",
+      async (event, { windowId }: { windowId: string | null }) => {
+        try {
+          this.selectedWindowId = windowId;
+          return { success: true };
+        } catch (error) {
+          return { success: false, error: (error as Error).message };
+        }
+      }
+    );
+
+    ipcMain.handle("window:get-selected", async () => {
+      try {
+        return { success: true, data: this.selectedWindowId };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    });
+
+    // Webview handlers
+    ipcMain.handle(
+      "webview:create",
+      async (event, data: IPCEventData<"webview:create">) => {
+        try {
+          await this.webviewManager.createWebview(data.windowId, data.url);
+          return { success: true };
+        } catch (error) {
+          return { success: false, error: (error as Error).message };
+        }
+      }
+    );
+
+    ipcMain.handle(
+      "webview:get-content",
+      async (event, data: IPCEventData<"webview:get-content">) => {
+        try {
+          const content = await this.webviewManager.getWebviewContent(
+            data.windowId
+          );
+          return { success: true, data: content };
+        } catch (error) {
+          return { success: false, error: (error as Error).message };
+        }
+      }
+    );
+
+    ipcMain.handle(
+      "webview:set-bounds",
+      async (event, data: IPCEventData<"webview:set-bounds">) => {
+        try {
+          this.webviewManager.setBounds(data.windowId, data.bounds);
+          return { success: true };
+        } catch (error) {
+          return { success: false, error: (error as Error).message };
+        }
+      }
+    );
+
+    ipcMain.handle(
+      "webview:go-back",
+      async (event, data: IPCEventData<"webview:go-back">) => {
+        try {
+          await this.webviewManager.goBack(data.windowId);
+          return { success: true };
+        } catch (error) {
+          return { success: false, error: (error as Error).message };
+        }
+      }
+    );
+
+    ipcMain.handle(
+      "webview:go-forward",
+      async (event, data: IPCEventData<"webview:go-forward">) => {
+        try {
+          await this.webviewManager.goForward(data.windowId);
+          return { success: true };
+        } catch (error) {
+          return { success: false, error: (error as Error).message };
+        }
+      }
+    );
+
+    ipcMain.handle(
+      "webview:reload",
+      async (event, data: IPCEventData<"webview:reload">) => {
+        try {
+          await this.webviewManager.reload(data.windowId);
+          return { success: true };
+        } catch (error) {
+          return { success: false, error: (error as Error).message };
+        }
+      }
+    );
+
+    ipcMain.handle(
+      "webview:update-canvas-offset",
+      async (event, data: IPCEventData<"webview:update-canvas-offset">) => {
+        try {
+          this.webviewManager.updateCanvasOffset(data.offsetX, data.offsetY);
+          return { success: true };
+        } catch (error) {
+          return { success: false, error: (error as Error).message };
+        }
+      }
+    );
   }
 
   public getMainWindow(): BrowserWindow | null {
     return this.mainWindow;
+  }
+
+  public getSelectedWindowId(): string | null {
+    return this.selectedWindowId;
+  }
+
+  public getWebviewManager(): WebviewManager {
+    return this.webviewManager;
   }
 }
 

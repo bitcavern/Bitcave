@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
+import type { ReactNode } from "react";
 import type { BaseWindow } from "@/shared/types";
 
 interface AISidebarProps {
@@ -19,6 +20,207 @@ interface APIKeyModalProps {
   onClose: () => void;
   onSave: (apiKey: string) => void;
 }
+
+// Lightweight formatter for basic markdown-like syntax: headings, bold, italics,
+// inline code, and fenced code blocks. Purposefully minimal to avoid heavy deps.
+const renderInline = (text: string): ReactNode[] => {
+  const nodes: ReactNode[] = [];
+  let lastIndex = 0;
+  let keyCounter = 0;
+
+  // Inline code first: `code`
+  const codeRegex = /`([^`]+)`/g;
+  let match: RegExpExecArray | null;
+  while ((match = codeRegex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      const segment = text.slice(lastIndex, match.index);
+      nodes.push(...applyBoldItalic(segment, () => keyCounter++));
+    }
+    nodes.push(
+      <code
+        key={`inline-code-${keyCounter++}`}
+        style={{
+          backgroundColor: "#1f2937",
+          padding: "2px 6px",
+          borderRadius: 4,
+          border: "1px solid #374151",
+          fontFamily:
+            'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+          fontStyle: "italic",
+          color: "#d1d5db",
+        }}
+      >
+        {match[1]}
+      </code>
+    );
+    lastIndex = match.index + match[0].length;
+  }
+  if (lastIndex < text.length) {
+    nodes.push(...applyBoldItalic(text.slice(lastIndex), () => keyCounter++));
+  }
+  return nodes;
+};
+
+const applyBoldItalic = (text: string, nextKey: () => number): ReactNode[] => {
+  const result: ReactNode[] = [];
+  const boldRegex = /\*\*([^*]+)\*\*/g;
+  let start = 0;
+  let m: RegExpExecArray | null;
+  while ((m = boldRegex.exec(text)) !== null) {
+    if (m.index > start) {
+      result.push(...applyItalic(text.slice(start, m.index), nextKey));
+    }
+    result.push(
+      <strong key={`b-${nextKey()}`}>{applyItalic(m[1], nextKey)}</strong>
+    );
+    start = m.index + m[0].length;
+  }
+  if (start < text.length) {
+    result.push(...applyItalic(text.slice(start), nextKey));
+  }
+  return result;
+};
+
+const applyItalic = (text: string, nextKey: () => number): ReactNode[] => {
+  const parts: ReactNode[] = [];
+  const italicRegex = /\*([^*]+)\*|_([^_]+)_/g;
+  let start = 0;
+  let m: RegExpExecArray | null;
+  while ((m = italicRegex.exec(text)) !== null) {
+    if (m.index > start) {
+      parts.push(text.slice(start, m.index));
+    }
+    const content = m[1] || m[2] || "";
+    parts.push(<em key={`i-${nextKey()}`}>{content}</em>);
+    start = m.index + m[0].length;
+  }
+  if (start < text.length) {
+    parts.push(text.slice(start));
+  }
+  return parts;
+};
+
+const renderFormattedMessage = (content: string): ReactNode => {
+  const lines = content.split("\n");
+  const nodes: ReactNode[] = [];
+  let i = 0;
+  let keyCounter = 0;
+
+  while (i < lines.length) {
+    const rawLine = lines[i];
+    const line = rawLine ?? "";
+
+    // Fenced code block: ``` or ~~~
+    if (line.trim().startsWith("```") || line.trim().startsWith("~~~")) {
+      const fence = line.trim().slice(0, 3);
+      i++;
+      const codeLines: string[] = [];
+      while (i < lines.length && !lines[i].trim().startsWith(fence)) {
+        codeLines.push(lines[i]);
+        i++;
+      }
+      if (i < lines.length && lines[i].trim().startsWith(fence)) {
+        i++;
+      }
+      const codeText = codeLines.join("\n");
+      nodes.push(
+        <div
+          key={`code-${keyCounter++}`}
+          style={{
+            backgroundColor: "#1f2937",
+            border: "1px solid #374151",
+            borderRadius: 8,
+            padding: 12,
+            color: "#d1d5db",
+            fontStyle: "italic",
+            overflowX: "auto",
+          }}
+        >
+          <pre style={{ margin: 0, whiteSpace: "pre-wrap" }}>
+            <code
+              style={{
+                fontFamily:
+                  'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+                fontSize: 13,
+              }}
+            >
+              {codeText}
+            </code>
+          </pre>
+        </div>
+      );
+      continue;
+    }
+
+    // Skip blank lines
+    if (line.trim() === "") {
+      i++;
+      continue;
+    }
+
+    // Headings
+    const h3 = line.match(/^\s*###\s+(.+)/);
+    if (h3) {
+      nodes.push(
+        <div
+          key={`h3-${keyCounter++}`}
+          style={{ fontSize: 16, fontWeight: 600, margin: "6px 0" }}
+        >
+          {renderInline(h3[1])}
+        </div>
+      );
+      i++;
+      continue;
+    }
+    const h2 = line.match(/^\s*##\s+(.+)/);
+    if (h2) {
+      nodes.push(
+        <div
+          key={`h2-${keyCounter++}`}
+          style={{ fontSize: 18, fontWeight: 700, margin: "8px 0" }}
+        >
+          {renderInline(h2[1])}
+        </div>
+      );
+      i++;
+      continue;
+    }
+    const h1 = line.match(/^\s*#\s+(.+)/);
+    if (h1) {
+      nodes.push(
+        <div
+          key={`h1-${keyCounter++}`}
+          style={{ fontSize: 20, fontWeight: 700, margin: "10px 0" }}
+        >
+          {renderInline(h1[1])}
+        </div>
+      );
+      i++;
+      continue;
+    }
+
+    // Paragraph: collect consecutive lines until blank/fence
+    const paraLines: string[] = [line];
+    i++;
+    while (
+      i < lines.length &&
+      lines[i].trim() !== "" &&
+      !lines[i].trim().startsWith("```") &&
+      !lines[i].trim().startsWith("~~~")
+    ) {
+      paraLines.push(lines[i]);
+      i++;
+    }
+    const paraText = paraLines.join(" ").trim();
+    nodes.push(
+      <p key={`p-${keyCounter++}`} style={{ margin: "8px 0" }}>
+        {renderInline(paraText)}
+      </p>
+    );
+  }
+
+  return <>{nodes}</>;
+};
 
 // API Key Modal Component
 const APIKeyModal: React.FC<APIKeyModalProps> = ({
@@ -70,7 +272,7 @@ const APIKeyModal: React.FC<APIKeyModalProps> = ({
           Configure OpenRouter API Key
         </h3>
         <p style={{ margin: "0 0 16px 0", color: "#9ca3af", fontSize: "14px" }}>
-          Enter your OpenRouter API key to enable AI features. You can get one
+          Enter your OpenRouter API key to enable Bit features. You can get one
           at{" "}
           <a
             href="https://openrouter.ai"
@@ -150,11 +352,11 @@ export const AISidebar: React.FC<AISidebarProps> = ({
   const [showAPIKeyModal, setShowAPIKeyModal] = useState(false);
   const [conversationId] = useState("main"); // Single conversation for now
   const [isResizing, setIsResizing] = useState(false);
-  const [sidebarWidth, setSidebarWidth] = useState(300);
+  const [sidebarWidth, setSidebarWidth] = useState(380);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
   const resizeStartX = useRef<number>(0);
-  const resizeStartWidth = useRef<number>(300);
+  const resizeStartWidth = useRef<number>(380);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -174,14 +376,14 @@ export const AISidebar: React.FC<AISidebarProps> = ({
                 id: "welcome",
                 role: "system",
                 content:
-                  "🔑 AI Assistant ready! I can help you create and manage text windows, read content, and organize your workspace. What would you like to do?",
+                  "🔑 Bit Assistant ready! I can help you create and manage text windows, read content, and organize your workspace. What would you like to do?",
                 timestamp: new Date(),
               },
             ]);
           }
         }
       } catch (error) {
-        console.error("Failed to check AI configuration:", error);
+        console.error("Failed to check Bit configuration:", error);
       }
     };
 
@@ -208,7 +410,7 @@ export const AISidebar: React.FC<AISidebarProps> = ({
       if (isResizing) {
         const deltaX = resizeStartX.current - e.clientX;
         const newWidth = Math.max(
-          260,
+          320,
           Math.min(600, resizeStartWidth.current + deltaX)
         );
         setSidebarWidth(newWidth);
@@ -255,7 +457,7 @@ export const AISidebar: React.FC<AISidebarProps> = ({
             id: "welcome",
             role: "system",
             content:
-              "AI Assistant ready! I can help you create and manage text windows, read content, and organize your workspace. What would you like to do?",
+              "Bit Assistant ready! I can help you create and manage text windows, read content, and organize your workspace. What would you like to do?",
             timestamp: new Date(),
           },
         ]);
@@ -265,8 +467,8 @@ export const AISidebar: React.FC<AISidebarProps> = ({
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (e?: React.FormEvent) => {
+    e?.preventDefault();
     if (!inputValue.trim() || isProcessing) return;
 
     if (!isConfigured) {
@@ -312,12 +514,19 @@ export const AISidebar: React.FC<AISidebarProps> = ({
       const errorMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
         role: "system",
-        content: `Failed to communicate with AI: ${(error as Error).message}`,
+        content: `Failed to communicate with Bit: ${(error as Error).message}`,
         timestamp: new Date(),
       };
       setMessages((prev) => [...prev, errorMessage]);
     } finally {
       setIsProcessing(false);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSubmit();
     }
   };
 
@@ -402,7 +611,7 @@ export const AISidebar: React.FC<AISidebarProps> = ({
                 color: "#f9fafb",
               }}
             >
-              AI Assistant
+              Bit Assistant
             </h3>
           </div>
           <button
@@ -449,23 +658,30 @@ export const AISidebar: React.FC<AISidebarProps> = ({
           <div
             key={message.id}
             style={{
-              padding: "8px 12px",
-              borderRadius: "8px",
+              padding: "12px 16px",
+              borderRadius: "12px",
               backgroundColor:
                 message.role === "user"
                   ? "#3b82f6"
                   : message.role === "system"
                   ? "#374151"
-                  : "#059669",
+                  : "#374151",
               color: "#f9fafb",
               fontSize: "14px",
-              lineHeight: "1.4",
+              lineHeight: "1.5",
               alignSelf: message.role === "user" ? "flex-end" : "flex-start",
               maxWidth: "85%",
-              whiteSpace: "pre-wrap",
+              boxShadow: "0 2px 8px rgba(0, 0, 0, 0.2)",
+              border: `1px solid ${
+                message.role === "user"
+                  ? "rgba(59, 130, 246, 0.3)"
+                  : "rgba(55, 65, 81, 0.3)"
+              }`,
             }}
           >
-            {message.content}
+            <div style={{ overflowX: "auto" }}>
+              {renderFormattedMessage(message.content)}
+            </div>
           </div>
         ))}
 
@@ -481,7 +697,7 @@ export const AISidebar: React.FC<AISidebarProps> = ({
               maxWidth: "85%",
             }}
           >
-            AI is thinking...
+            Bit is thinking...
           </div>
         )}
 
@@ -499,30 +715,32 @@ export const AISidebar: React.FC<AISidebarProps> = ({
           backgroundColor: "#111827",
         }}
       >
-        <div style={{ display: "flex", gap: "8px", alignItems: "flex-end" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
           <textarea
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
+            onKeyDown={handleKeyDown}
             placeholder={
               isConfigured
-                ? "Ask AI to create or read text windows..."
+                ? "Ask Bit to create or read text windows... (Enter to send, Shift+Enter for new line)"
                 : "Configure API key to start chatting..."
             }
             disabled={isProcessing || !isConfigured}
             style={{
-              flex: 1,
+              width: "100%",
               maxHeight: "160px",
-              minHeight: "38px",
-              padding: "8px 12px",
-              borderRadius: "6px",
+              minHeight: "64px",
+              padding: "12px",
+              borderRadius: "8px",
               border: "1px solid #374151",
               backgroundColor: "#1f2937",
               color: "#f9fafb",
               fontSize: "14px",
               outline: "none",
-              resize: "vertical",
+              resize: "none",
               lineHeight: 1.4,
               overflowY: "auto",
+              boxSizing: "border-box",
             }}
             onFocus={(e) => {
               e.target.style.borderColor = "#3b82f6";
@@ -531,28 +749,31 @@ export const AISidebar: React.FC<AISidebarProps> = ({
               e.target.style.borderColor = "#374151";
             }}
           />
-          <button
-            type="submit"
-            disabled={!inputValue.trim() || isProcessing || !isConfigured}
-            style={{
-              padding: "8px 12px",
-              borderRadius: "6px",
-              border: "none",
-              backgroundColor:
-                inputValue.trim() && !isProcessing && isConfigured
-                  ? "#3b82f6"
-                  : "#374151",
-              color: "#f9fafb",
-              fontSize: "14px",
-              cursor:
-                inputValue.trim() && !isProcessing && isConfigured
-                  ? "pointer"
-                  : "not-allowed",
-              transition: "background-color 0.2s",
-            }}
-          >
-            {isConfigured ? "Send" : "Config"}
-          </button>
+          <div style={{ display: "flex", justifyContent: "flex-end" }}>
+            <button
+              type="submit"
+              disabled={!inputValue.trim() || isProcessing || !isConfigured}
+              style={{
+                padding: "8px 16px",
+                borderRadius: "6px",
+                border: "none",
+                backgroundColor:
+                  inputValue.trim() && !isProcessing && isConfigured
+                    ? "#3b82f6"
+                    : "#374151",
+                color: "#f9fafb",
+                fontSize: "14px",
+                cursor:
+                  inputValue.trim() && !isProcessing && isConfigured
+                    ? "pointer"
+                    : "not-allowed",
+                transition: "background-color 0.2s",
+                fontWeight: "500",
+              }}
+            >
+              {isConfigured ? "Send" : "Config"}
+            </button>
+          </div>
         </div>
       </form>
 
