@@ -476,6 +476,11 @@ export class AIToolRegistry {
           required: true,
           description: "New text content",
         },
+        mode: {
+          type: "string",
+          required: false,
+          description: "How to apply content: replace, append, prepend",
+        },
       },
       execute: async (params) => {
         const window = this.windowManager.getWindow(params.windowId);
@@ -487,13 +492,21 @@ export class AIToolRegistry {
           throw new Error(`Window ${params.windowId} is not a text window`);
         }
 
-        return await this.windowManager.updateWindow(params.windowId, {
+        const existing = String(window.metadata?.content || "");
+        const mode = (params.mode as string) || "replace";
+        let nextContent = String(params.content);
+        if (mode === "append") nextContent = existing + nextContent;
+        if (mode === "prepend") nextContent = nextContent + existing;
+
+        const updated = await this.windowManager.updateWindow(params.windowId, {
           metadata: {
             ...window.metadata,
-            content: params.content,
+            content: nextContent,
             lastModified: new Date().toISOString(),
           },
         });
+        this.triggerWindowUpdated(updated);
+        return updated;
       },
     });
 
@@ -522,6 +535,26 @@ export class AIToolRegistry {
       },
     });
 
+    // Read text by label
+    this.registerTool({
+      name: "readTextByLabel",
+      description: "Read the content from a text window by its label",
+      parameters: {
+        label: { type: "string", required: true, description: "Window label" },
+      },
+      execute: async (params) => {
+        const match = this.findTextWindowByLabel(params.label);
+        if (!match)
+          throw new Error(`No text window found with label '${params.label}'`);
+        return {
+          windowId: match.id,
+          label: match.metadata?.label || "Untitled",
+          content: match.metadata?.content || "",
+          lastModified: match.metadata?.lastModified,
+        };
+      },
+    });
+
     this.registerTool({
       name: "listTextWindows",
       description: "Get a list of all text windows with their labels and IDs",
@@ -537,6 +570,80 @@ export class AIToolRegistry {
           ),
           lastModified: window.metadata?.lastModified,
         }));
+      },
+    });
+
+    // Update text by label
+    this.registerTool({
+      name: "updateTextByLabel",
+      description: "Update the content of a text window identified by label",
+      parameters: {
+        label: { type: "string", required: true, description: "Window label" },
+        content: { type: "string", required: true, description: "Content" },
+        mode: {
+          type: "string",
+          required: false,
+          description: "How to apply content: replace, append, prepend",
+        },
+      },
+      execute: async (params) => {
+        const match = this.findTextWindowByLabel(params.label);
+        if (!match)
+          throw new Error(`No text window found with label '${params.label}'`);
+        const existing = String(match.metadata?.content || "");
+        const mode = (params.mode as string) || "replace";
+        let nextContent = String(params.content);
+        if (mode === "append") nextContent = existing + nextContent;
+        if (mode === "prepend") nextContent = nextContent + existing;
+        const updated = await this.windowManager.updateWindow(match.id, {
+          metadata: {
+            ...match.metadata,
+            content: nextContent,
+            lastModified: new Date().toISOString(),
+          },
+        });
+        this.triggerWindowUpdated(updated);
+        return updated;
+      },
+    });
+
+    // Update text label (by id or label)
+    this.registerTool({
+      name: "updateTextLabel",
+      description:
+        "Update the label (and title) of a text window by id or label",
+      parameters: {
+        windowId: { type: "string", required: false, description: "Window ID" },
+        label: {
+          type: "string",
+          required: false,
+          description: "Current label",
+        },
+        newLabel: { type: "string", required: true, description: "New label" },
+      },
+      execute: async (params) => {
+        let target = null as any;
+        if (params.windowId) {
+          target = this.windowManager.getWindow(params.windowId);
+          if (!target) throw new Error(`Window ${params.windowId} not found`);
+        } else if (params.label) {
+          target = this.findTextWindowByLabel(params.label);
+          if (!target)
+            throw new Error(
+              `No text window found with label '${params.label}'`
+            );
+        } else {
+          throw new Error("Provide windowId or label");
+        }
+        if (target.type !== "text")
+          throw new Error(`Window ${target.id} is not a text window`);
+        const newLabel = String(params.newLabel);
+        const updated = await this.windowManager.updateWindow(target.id, {
+          title: newLabel,
+          metadata: { ...target.metadata, label: newLabel },
+        });
+        this.triggerWindowUpdated(updated);
+        return updated;
       },
     });
   }
@@ -557,6 +664,17 @@ export class AIToolRegistry {
     }
   }
 
+  private triggerWindowUpdated(window: any): void {
+    try {
+      const mainWindow = BrowserWindow.getAllWindows()[0];
+      if (mainWindow) {
+        mainWindow.webContents.send("window:updated", window);
+      }
+    } catch (e) {
+      console.error("[AIToolRegistry] Failed to emit window:updated:", e);
+    }
+  }
+
   private showToast(message: string): void {
     try {
       const mainWindow = BrowserWindow.getAllWindows()[0];
@@ -566,6 +684,19 @@ export class AIToolRegistry {
     } catch (error) {
       console.error("[AIToolRegistry] Failed to send toast:", error);
     }
+  }
+
+  private findTextWindowByLabel(label: string): any | null {
+    const textWindows = this.windowManager.getWindowsByType("text");
+    const normalized = String(label).trim().toLowerCase();
+    return (
+      textWindows.find(
+        (w) =>
+          String(w.metadata?.label || "")
+            .trim()
+            .toLowerCase() === normalized
+      ) || null
+    );
   }
 
   private safeString(

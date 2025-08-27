@@ -12,6 +12,7 @@ export const App: React.FC = () => {
     viewport: APP_CONFIG.canvasDefaults.viewport,
     dimensions: { width: window.innerWidth - 300, height: window.innerHeight }, // Account for 300px sidebar
   });
+  const [sidebarWidth, setSidebarWidth] = useState<number>(300);
   const [selectedWindowId, setSelectedWindowId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [toasts, setToasts] = useState<{ id: string; message: string }[]>([]);
@@ -40,12 +41,21 @@ export const App: React.FC = () => {
 
     console.log("[App] Setting up window:created event listener");
     window.electronAPI.on("window:created", handleWindowCreated);
+    window.electronAPI.on(
+      "window:updated",
+      (_event: any, updated: BaseWindow) => {
+        setWindows((prev) =>
+          prev.map((w) => (w.id === updated.id ? updated : w))
+        );
+      }
+    );
 
     initializeApp();
 
     return () => {
       console.log("[App] Cleaning up window:created event listener");
       window.electronAPI.removeAllListeners("window:created");
+      window.electronAPI.removeAllListeners("window:updated");
     };
   }, []);
 
@@ -76,7 +86,7 @@ export const App: React.FC = () => {
       setCanvasState((prev) => ({
         ...prev,
         dimensions: {
-          width: window.innerWidth - 300,
+          width: window.innerWidth - sidebarWidth,
           height: window.innerHeight,
         }, // Account for 300px sidebar
       }));
@@ -84,7 +94,7 @@ export const App: React.FC = () => {
 
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
-  }, []);
+  }, [sidebarWidth]);
 
   const addWindowToState = (newWindow: BaseWindow) => {
     setWindows((prev) => {
@@ -249,26 +259,27 @@ export const App: React.FC = () => {
           position: "fixed",
           top: 0,
           left: 0,
-          right: 300, // Leave space for AI sidebar
-          height: "32px",
-          backgroundColor: "rgba(31, 41, 55, 0.8)",
+          right: `${sidebarWidth + 50}px`, // Leave space for AI sidebar
+          height: "40px",
+          backgroundColor: "rgba(31, 41, 55, 0.2)",
           backdropFilter: "blur(10px)",
           zIndex: 200,
           // @ts-ignore - WebkitAppRegion is a valid CSS property for Electron
           WebkitAppRegion: "drag",
           borderBottom: "1px solid rgba(75, 85, 99, 0.5)",
+          borderBottomRightRadius: "20px",
           display: "flex",
           alignItems: "center",
-          paddingLeft: "12px",
+          justifyContent: "center",
           color: "#9ca3af",
           fontSize: "14px",
           fontWeight: "500",
         }}
       >
-        Bitcave AI Dashboard
+        Bitcave!
       </div>
 
-      <div style={{ width: "calc(100% - 300px)", height: "100%" }}>
+      <div style={{ width: `calc(100% - ${sidebarWidth}px)`, height: "100%" }}>
         <Canvas
           state={canvasState}
           onViewportChange={handleCanvasViewportChange}
@@ -298,6 +309,7 @@ export const App: React.FC = () => {
       <AISidebar
         windows={windows}
         onCreateTextWindow={handleCreateTextWindow}
+        onWidthChange={(w) => setSidebarWidth(Math.round(w))}
       />
 
       {/* Toasts */}

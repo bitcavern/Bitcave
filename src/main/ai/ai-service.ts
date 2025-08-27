@@ -5,6 +5,7 @@ import {
   ToolCall,
 } from "./openrouter-client";
 import { AIToolRegistry } from "../ai-tools/registry";
+import type { WindowManager } from "../window-manager";
 import { BrowserWindow } from "electron";
 
 export interface AIConversation {
@@ -17,10 +18,12 @@ export interface AIConversation {
 export class AIService {
   private client: OpenRouterClient | null = null;
   private toolRegistry: AIToolRegistry;
+  private windowManager: WindowManager;
   private conversations: Map<string, AIConversation> = new Map();
 
-  constructor(toolRegistry: AIToolRegistry) {
+  constructor(toolRegistry: AIToolRegistry, windowManager: WindowManager) {
     this.toolRegistry = toolRegistry;
+    this.windowManager = windowManager;
   }
 
   setApiKey(apiKey: string) {
@@ -52,6 +55,67 @@ export class AIService {
               },
             },
             required: ["label"],
+          },
+        },
+      },
+      {
+        type: "function",
+        function: {
+          name: "readTextByLabel",
+          description: "Read the content from a text window by label",
+          parameters: {
+            type: "object",
+            properties: {
+              label: {
+                type: "string",
+                description: "The label of the text window to read from",
+              },
+            },
+            required: ["label"],
+          },
+        },
+      },
+      {
+        type: "function",
+        function: {
+          name: "updateTextByLabel",
+          description:
+            "Update the content of a specific text window identified by label",
+          parameters: {
+            type: "object",
+            properties: {
+              label: {
+                type: "string",
+                description: "The label of the text window to update",
+              },
+              content: {
+                type: "string",
+                description: "The new content for the text window",
+              },
+              mode: {
+                type: "string",
+                enum: ["replace", "append", "prepend"],
+                description: "How to apply the content update",
+              },
+            },
+            required: ["label", "content"],
+          },
+        },
+      },
+      {
+        type: "function",
+        function: {
+          name: "updateTextLabel",
+          description:
+            "Rename a text window label (and title) by id or current label",
+          parameters: {
+            type: "object",
+            properties: {
+              windowId: { type: "string", description: "Optional window id" },
+              label: { type: "string", description: "Current label" },
+              newLabel: { type: "string", description: "New label" },
+            },
+            required: ["newLabel"],
           },
         },
       },
@@ -194,15 +258,20 @@ The user interface shows windows on an infinite canvas that can be moved and res
     });
 
     try {
+      const contextMessage: OpenRouterMessage = {
+        role: "system",
+        content: this.buildWindowContextMessage(),
+      };
+
       console.log(
         `[AIService] Making API call with ${
           conversation.messages.length
-        } messages and ${this.getToolDefinitions().length} tools`
+        } messages (+1 context) and ${this.getToolDefinitions().length} tools`
       );
 
-      // Make API call with tools
+      // Make API call with tools and dynamic context
       const response = await this.client.createChatCompletion({
-        messages: conversation.messages,
+        messages: [...conversation.messages, contextMessage],
         tools: this.getToolDefinitions(),
         tool_choice: "auto",
         temperature: 0.7,
@@ -282,9 +351,13 @@ The user interface shows windows on an infinite canvas that can be moved and res
           }
         }
 
-        // Get final response after tool execution
+        // Get final response after tool execution (refresh context)
+        const finalContext: OpenRouterMessage = {
+          role: "system",
+          content: this.buildWindowContextMessage(),
+        };
         const finalResponse = await this.client.createChatCompletion({
-          messages: conversation.messages,
+          messages: [...conversation.messages, finalContext],
           tools: this.getToolDefinitions(),
           tool_choice: "auto",
           temperature: 0.7,
@@ -292,24 +365,82 @@ The user interface shows windows on an infinite canvas that can be moved and res
         });
 
         const finalChoice = finalResponse.choices[0];
-        if (finalChoice && finalChoice.message.content) {
-          conversation.messages.push({
-            role: "assistant",
-            content: finalChoice.message.content,
+        if (finalChoice) {
+          const cleaned = (finalChoice.message.content || "").replace(
+            /^\s+/,
+            ""
+          );
+          if (cleaned) {
+            conversation.messages.push({ role: "assistant", content: cleaned });
+            conversation.updatedAt = new Date();
+            return cleaned;
+          }
+          // Auto-continue once if empty
+          const continueMsg: OpenRouterMessage = {
+            role: "user",
+            content: "Continue.",
+          };
+          const contResp = await this.client.createChatCompletion({
+            messages: [...conversation.messages, continueMsg, finalContext],
+            tools: this.getToolDefinitions(),
+            tool_choice: "auto",
+            temperature: 0.7,
+            max_tokens: 1000,
           });
-          conversation.updatedAt = new Date();
-          return finalChoice.message.content;
+          const contChoice = contResp.choices[0];
+          const contClean = (contChoice?.message.content || "").replace(
+            /^\s+/,
+            ""
+          );
+          if (contClean) {
+            conversation.messages.push({
+              role: "assistant",
+              content: contClean,
+            });
+            conversation.updatedAt = new Date();
+            return contClean;
+          }
         }
       }
 
       // No tool calls, just return the content
-      if (assistantMessage.content) {
+      const cleanedInitial = (assistantMessage.content || "").replace(
+        /^\s+/,
+        ""
+      );
+      if (cleanedInitial) {
         conversation.messages.push({
           role: "assistant",
-          content: assistantMessage.content || "",
+          content: cleanedInitial,
         });
         conversation.updatedAt = new Date();
-        return assistantMessage.content || "";
+        return cleanedInitial;
+      }
+      // If empty, try one auto-continue
+      const contextMessage2: OpenRouterMessage = {
+        role: "system",
+        content: this.buildWindowContextMessage(),
+      };
+      const contResp2 = await this.client.createChatCompletion({
+        messages: [
+          ...conversation.messages,
+          { role: "user", content: "Continue." },
+          contextMessage2,
+        ],
+        tools: this.getToolDefinitions(),
+        tool_choice: "auto",
+        temperature: 0.7,
+        max_tokens: 1000,
+      });
+      const contChoice2 = contResp2.choices[0];
+      const contClean2 = (contChoice2?.message.content || "").replace(
+        /^\s+/,
+        ""
+      );
+      if (contClean2) {
+        conversation.messages.push({ role: "assistant", content: contClean2 });
+        conversation.updatedAt = new Date();
+        return contClean2;
       }
 
       throw new Error("No content in AI response");
@@ -317,6 +448,35 @@ The user interface shows windows on an infinite canvas that can be moved and res
       console.error("AI Service error:", error);
       throw error;
     }
+  }
+
+  private buildWindowContextMessage(): string {
+    const windows = (global as any)?.bitcaveApp
+      ? (global as any).bitcaveApp["windowManager"].getAllWindows?.() || []
+      : this.windowManager?.getAllWindows?.() || [];
+
+    const summary = windows.map((w: any) => ({
+      id: w.id,
+      type: w.type,
+      title: w.title,
+      label: w.metadata?.label || null,
+      position: w.position,
+      size: w.size,
+      isLocked: w.isLocked,
+      isMinimized: w.isMinimized,
+      lastModified: w.metadata?.lastModified || null,
+      contentInfo:
+        typeof w.metadata?.content === "string"
+          ? { chars: w.metadata.content.length }
+          : undefined,
+    }));
+
+    const instruction =
+      "Context: This is the current open window state. Do NOT assume in-memory content is fresh. If you need the current text, explicitly call readTextContent/readTextByLabel before answering.";
+
+    return `{"windows": ${JSON.stringify(summary)}, "note": ${JSON.stringify(
+      instruction
+    )}}`;
   }
 
   getConversation(conversationId: string): AIConversation | undefined {

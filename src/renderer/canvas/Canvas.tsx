@@ -61,17 +61,16 @@ export const Canvas: React.FC<CanvasProps> = ({
   // Handle mouse down for panning
   const handleMouseDown = useCallback(
     (event: React.MouseEvent) => {
-      if (event.button === 0) {
-        // Only start panning if clicking on the canvas itself, not on windows
-        const target = event.target as HTMLElement;
-        if (
-          target === canvasRef.current ||
-          target.classList.contains("canvas")
-        ) {
-          setIsDragging(true);
-          setDragStart({ x: event.clientX, y: event.clientY });
-          setLastViewport(state.viewport);
-        }
+      const target = event.target as HTMLElement;
+      const onCanvas =
+        target === canvasRef.current || target.classList.contains("canvas");
+      const isPanButton =
+        event.button === 0 || event.button === 1 || event.button === 2; // middle/right
+      const shouldPan = isPanButton || (event.button === 0 && onCanvas);
+      if (shouldPan) {
+        setIsDragging(true);
+        setDragStart({ x: event.clientX, y: event.clientY });
+        setLastViewport(state.viewport);
       }
     },
     [state.viewport]
@@ -98,6 +97,8 @@ export const Canvas: React.FC<CanvasProps> = ({
   const handleMouseUp = useCallback(() => {
     setIsDragging(false);
   }, []);
+
+  // Spacebar panning removed to avoid interfering with typing in the AI sidebar
 
   // Set up event listeners
   useEffect(() => {

@@ -63,7 +63,7 @@ export interface OpenRouterResponse {
 export class OpenRouterClient {
   private apiKey: string;
   private baseUrl = "https://openrouter.ai/api/v1";
-  private defaultModel = "qwen/qwen3-235b-a22b:free";
+  private defaultModel = "z-ai/glm-4.5-air:free";
 
   constructor(apiKey: string) {
     this.apiKey = apiKey;
@@ -76,6 +76,9 @@ export class OpenRouterClient {
 
     const payload = {
       model: request.model || this.defaultModel,
+      reasoning: {
+        type: "disabled",
+      },
       messages: request.messages,
       tools: request.tools,
       tool_choice: request.tool_choice || "auto",

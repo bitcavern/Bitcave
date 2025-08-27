@@ -298,3 +298,89 @@ src/
 
 _Last Updated: December 2024_
 _Next Update: After project initialization_
+
+# Development Guide
+
+## Hot Reloading Setup
+
+The app now supports full hot reloading for both the main and renderer processes during development.
+
+### Quick Start
+
+1. **Start the development environment:**
+
+   ```bash
+   npm run dev
+   ```
+
+2. **The app will automatically:**
+   - Start webpack dev server for the renderer process
+   - Watch and rebuild main process files
+   - Open the Electron app with DevTools
+   - Enable hot reloading for both processes
+
+### Hot Reloading Features
+
+#### Renderer Process (React/TypeScript)
+
+- ✅ **Instant updates**: Changes to React components update immediately
+- ✅ **State preservation**: Component state is preserved during hot reloads
+- ✅ **Error overlay**: Compilation errors show as overlays
+- ✅ **Fast compilation**: TypeScript transpilation is optimized for speed
+
+#### Main Process (Electron/TypeScript)
+
+- ✅ **Auto-restart**: Main process automatically restarts when files change
+- ✅ **File watching**: Watches all main process files for changes
+- ✅ **Graceful reload**: App restarts cleanly without manual intervention
+
+### Development Workflow
+
+1. **Make changes to renderer files** (`src/renderer/**/*`)
+
+   - Changes appear instantly in the app
+   - No need to restart the app
+
+2. **Make changes to main process files** (`src/main/**/*`)
+
+   - App automatically restarts
+   - All windows are recreated
+   - IPC handlers are re-registered
+
+3. **Debug with DevTools**
+   - DevTools are automatically opened in development mode
+   - Console logs show hot reload events
+   - Breakpoints work normally
+
+### Troubleshooting
+
+**If hot reloading stops working:**
+
+1. Check that both webpack processes are running
+2. Restart the development server: `npm run dev`
+3. Check console for any compilation errors
+
+**If main process changes aren't detected:**
+
+1. Ensure `chokidar` is installed: `npm install --save-dev chokidar`
+2. Check that `NODE_ENV=development` is set
+3. Verify file paths in the watcher configuration
+
+### Performance Tips
+
+- Use `transpileOnly: true` in ts-loader for faster compilation
+- Hot reloading works best with smaller, focused components
+- Avoid large state changes during development to preserve state
+
+## Building for Production
+
+```bash
+npm run build
+npm start
+```
+
+## Package for Distribution
+
+```bash
+npm run package
+```

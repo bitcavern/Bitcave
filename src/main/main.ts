@@ -18,7 +18,7 @@ class BitcaveApp {
   constructor() {
     this.windowManager = new WindowManager();
     this.aiToolRegistry = new AIToolRegistry(this.windowManager);
-    this.aiService = new AIService(this.aiToolRegistry);
+    this.aiService = new AIService(this.aiToolRegistry, this.windowManager);
 
     // Initialize with environment API key if available
     const envApiKey = process.env.OPENROUTER_API_KEY;
@@ -34,6 +34,7 @@ class BitcaveApp {
     await app.whenReady();
     this.createMainWindow();
     this.setupIPCHandlers();
+    this.setupHotReload();
   }
 
   private createMainWindow(): void {
@@ -55,6 +56,14 @@ class BitcaveApp {
     if (process.env.NODE_ENV === "development") {
       this.mainWindow.loadURL("http://localhost:3000");
       this.mainWindow.webContents.openDevTools();
+
+      // Enable hot reload for renderer process
+      this.mainWindow.webContents.on("did-fail-load", () => {
+        console.log("Renderer failed to load, retrying...");
+        setTimeout(() => {
+          this.mainWindow?.loadURL("http://localhost:3000");
+        }, 1000);
+      });
     } else {
       this.mainWindow.loadFile(path.join(__dirname, "../renderer/index.html"));
     }
@@ -68,6 +77,34 @@ class BitcaveApp {
     this.mainWindow.on("closed", () => {
       this.mainWindow = null;
     });
+  }
+
+  private setupHotReload(): void {
+    if (process.env.NODE_ENV === "development") {
+      // Watch for main process file changes and restart
+      const chokidar = require("chokidar");
+      const watcher = chokidar.watch(
+        [path.join(__dirname, "**/*.js"), path.join(__dirname, "**/*.js.map")],
+        {
+          ignored: /node_modules/,
+          persistent: true,
+        }
+      );
+
+      watcher.on("change", (filePath: string) => {
+        console.log(`Main process file changed: ${filePath}`);
+        console.log("Restarting main process...");
+        app.relaunch();
+        app.exit(0);
+      });
+
+      // Handle renderer process hot reload
+      if (this.mainWindow) {
+        this.mainWindow.webContents.on("did-finish-load", () => {
+          console.log("Renderer loaded successfully");
+        });
+      }
+    }
   }
 
   private setupEventHandlers(): void {

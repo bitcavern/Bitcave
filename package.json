@@ -8,7 +8,7 @@
   "license": "MIT",
   "private": true,
   "scripts": {
-    "dev": "concurrently \"npm run dev:main\" \"npm run dev:renderer\"",
+    "dev": "NODE_ENV=development concurrently \"npm run dev:main\" \"npm run dev:renderer\"",
     "dev:main": "webpack --config webpack.main.config.js --mode development --watch",
     "dev:renderer": "webpack serve --config webpack.renderer.config.js --mode development",
     "build": "npm run build:main && npm run build:renderer",
@@ -45,6 +45,7 @@
     "@types/uuid": "^10.0.0",
     "@typescript-eslint/eslint-plugin": "^8.41.0",
     "@typescript-eslint/parser": "^8.41.0",
+    "chokidar": "^4.0.3",
     "concurrently": "^9.2.1",
     "css-loader": "^7.1.2",
     "electron-builder": "^26.0.12",

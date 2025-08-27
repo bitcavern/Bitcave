@@ -251,7 +251,7 @@ export const WindowRenderer: React.FC<WindowRendererProps> = ({
           overflow: "auto",
         }}
       >
-        <WindowContent window={window} />
+        <WindowContent window={window} onUpdate={onUpdate} />
       </div>
 
       {/* Resize Handles */}
@@ -339,7 +339,10 @@ export const WindowRenderer: React.FC<WindowRendererProps> = ({
 };
 
 // Window content component based on window type
-const WindowContent: React.FC<{ window: BaseWindow }> = ({ window }) => {
+const WindowContent: React.FC<{
+  window: BaseWindow;
+  onUpdate: (updates: Partial<BaseWindow>) => void;
+}> = ({ window, onUpdate }) => {
   switch (window.type) {
     case "webview":
     case "reference-webview":
@@ -465,11 +468,32 @@ const WindowContent: React.FC<{ window: BaseWindow }> = ({ window }) => {
               marginBottom: "12px",
               paddingBottom: "8px",
               borderBottom: "1px solid #374151",
+              gap: 8,
             }}
           >
-            <h3 style={{ margin: 0, fontSize: "16px" }}>
-              {window.metadata?.label || "Text Document"}
-            </h3>
+            <input
+              type="text"
+              value={window.metadata?.label || ""}
+              onChange={(e) => {
+                onUpdate({
+                  title: e.target.value || "Untitled",
+                  metadata: { ...window.metadata, label: e.target.value },
+                });
+              }}
+              placeholder="Window label"
+              style={{
+                margin: 0,
+                fontSize: "14px",
+                fontWeight: 500,
+                color: "#f9fafb",
+                backgroundColor: "#111827",
+                border: "1px solid #4b5563",
+                borderRadius: 6,
+                padding: "6px 8px",
+                outline: "none",
+                width: "60%",
+              }}
+            />
             <span
               style={{
                 fontSize: "12px",
@@ -496,12 +520,15 @@ const WindowContent: React.FC<{ window: BaseWindow }> = ({ window }) => {
               outline: "none",
             }}
             placeholder="Enter your text content here..."
-            defaultValue={window.metadata?.content || ""}
+            value={window.metadata?.content || ""}
             onChange={(e) => {
-              // Update window content in real-time
-              if (window.metadata) {
-                window.metadata.content = e.target.value;
-              }
+              onUpdate({
+                metadata: {
+                  ...window.metadata,
+                  content: e.target.value,
+                  lastModified: new Date().toISOString(),
+                },
+              });
             }}
           />
         </div>

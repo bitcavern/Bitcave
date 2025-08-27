@@ -23,6 +23,7 @@ module.exports = {
           loader: "ts-loader",
           options: {
             configFile: "tsconfig.renderer.json",
+            transpileOnly: true, // Faster compilation for development
           },
         },
         exclude: /node_modules/,
@@ -44,5 +45,18 @@ module.exports = {
     },
     port: 3000,
     hot: true,
+    liveReload: true,
+    watchFiles: {
+      paths: ["src/renderer/**/*"],
+      options: {
+        usePolling: false,
+      },
+    },
+    client: {
+      overlay: {
+        errors: true,
+        warnings: false,
+      },
+    },
   },
 };

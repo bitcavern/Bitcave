@@ -4,6 +4,7 @@ import type { BaseWindow } from "@/shared/types";
 interface AISidebarProps {
   windows: BaseWindow[];
   onCreateTextWindow: (label: string, content?: string) => void;
+  onWidthChange?: (width: number) => void;
 }
 
 interface ChatMessage {
@@ -140,6 +141,7 @@ const APIKeyModal: React.FC<APIKeyModalProps> = ({
 export const AISidebar: React.FC<AISidebarProps> = ({
   windows,
   onCreateTextWindow,
+  onWidthChange,
 }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputValue, setInputValue] = useState("");
@@ -147,7 +149,12 @@ export const AISidebar: React.FC<AISidebarProps> = ({
   const [isConfigured, setIsConfigured] = useState(false);
   const [showAPIKeyModal, setShowAPIKeyModal] = useState(false);
   const [conversationId] = useState("main"); // Single conversation for now
+  const [isResizing, setIsResizing] = useState(false);
+  const [sidebarWidth, setSidebarWidth] = useState(300);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const sidebarRef = useRef<HTMLDivElement>(null);
+  const resizeStartX = useRef<number>(0);
+  const resizeStartWidth = useRef<number>(300);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -184,6 +191,57 @@ export const AISidebar: React.FC<AISidebarProps> = ({
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Handle resize functionality
+  useEffect(() => {
+    const handleMouseDown = (e: MouseEvent) => {
+      if (e.target === sidebarRef.current) {
+        setIsResizing(true);
+        resizeStartX.current = e.clientX;
+        resizeStartWidth.current = sidebarWidth;
+        document.body.style.cursor = "col-resize";
+        document.body.style.userSelect = "none";
+      }
+    };
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (isResizing) {
+        const deltaX = resizeStartX.current - e.clientX;
+        const newWidth = Math.max(
+          260,
+          Math.min(600, resizeStartWidth.current + deltaX)
+        );
+        setSidebarWidth(newWidth);
+        if (onWidthChange) {
+          onWidthChange(newWidth);
+        }
+      }
+    };
+
+    const handleMouseUp = () => {
+      if (isResizing) {
+        setIsResizing(false);
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+      }
+    };
+
+    const sidebar = sidebarRef.current;
+    if (sidebar) {
+      sidebar.addEventListener("mousedown", handleMouseDown);
+    }
+
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+
+    return () => {
+      if (sidebar) {
+        sidebar.removeEventListener("mousedown", handleMouseDown);
+      }
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [isResizing, sidebarWidth, onWidthChange]);
 
   const handleAPIKeySave = async (apiKey: string) => {
     try {
@@ -237,7 +295,7 @@ export const AISidebar: React.FC<AISidebarProps> = ({
         const assistantMessage: ChatMessage = {
           id: (Date.now() + 1).toString(),
           role: "assistant",
-          content: result.data,
+          content: (result.data as string).replace(/^\s+/, ""),
           timestamp: new Date(),
         };
         setMessages((prev) => [...prev, assistantMessage]);
@@ -269,7 +327,7 @@ export const AISidebar: React.FC<AISidebarProps> = ({
         position: "fixed",
         top: 0,
         right: 0,
-        width: "300px",
+        width: `${sidebarWidth}px`,
         height: "100vh",
         backgroundColor: "#1f2937",
         borderLeft: "1px solid #374151",
@@ -278,6 +336,29 @@ export const AISidebar: React.FC<AISidebarProps> = ({
         zIndex: 150,
       }}
     >
+      {/* Resize handle */}
+      <div
+        ref={sidebarRef}
+        style={{
+          position: "absolute",
+          left: 0,
+          top: 0,
+          width: "4px",
+          height: "100%",
+          cursor: "col-resize",
+          backgroundColor: "transparent",
+          zIndex: 160,
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.backgroundColor = "rgba(59, 130, 246, 0.3)";
+        }}
+        onMouseLeave={(e) => {
+          if (!isResizing) {
+            e.currentTarget.style.backgroundColor = "transparent";
+          }
+        }}
+      />
+
       {/* Header */}
       <div
         style={{
@@ -407,9 +488,8 @@ export const AISidebar: React.FC<AISidebarProps> = ({
           backgroundColor: "#111827",
         }}
       >
-        <div style={{ display: "flex", gap: "8px" }}>
-          <input
-            type="text"
+        <div style={{ display: "flex", gap: "8px", alignItems: "flex-end" }}>
+          <textarea
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             placeholder={
@@ -420,6 +500,8 @@ export const AISidebar: React.FC<AISidebarProps> = ({
             disabled={isProcessing || !isConfigured}
             style={{
               flex: 1,
+              maxHeight: "160px",
+              minHeight: "38px",
               padding: "8px 12px",
               borderRadius: "6px",
               border: "1px solid #374151",
@@ -427,6 +509,9 @@ export const AISidebar: React.FC<AISidebarProps> = ({
               color: "#f9fafb",
               fontSize: "14px",
               outline: "none",
+              resize: "vertical",
+              lineHeight: 1.4,
+              overflowY: "auto",
             }}
             onFocus={(e) => {
               e.target.style.borderColor = "#3b82f6";

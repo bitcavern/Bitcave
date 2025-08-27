@@ -35,7 +35,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
     <div
       style={{
         position: "fixed",
-        top: "20px",
+        top: "48px", // Account for 32px title bar + 16px spacing
         left: "20px",
         zIndex: 100,
         backgroundColor: "rgba(31, 41, 55, 0.95)",
