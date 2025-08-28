@@ -75,9 +75,13 @@ export class AIService {
       // Create abort controller for this conversation
       const controller = new AbortController();
       this.abortControllers.set(conversationId, controller);
-      
+
       try {
-        return await this.processConversationLoop(conversationId, conversation, controller.signal);
+        return await this.processConversationLoop(
+          conversationId,
+          conversation,
+          controller.signal
+        );
       } finally {
         this.abortControllers.delete(conversationId);
       }
@@ -88,7 +92,11 @@ export class AIService {
     }
   }
 
-  private async processConversationLoop(conversationId: string, conversation: AIConversation, abortSignal: AbortSignal): Promise<string> {
+  private async processConversationLoop(
+    conversationId: string,
+    conversation: AIConversation,
+    abortSignal: AbortSignal
+  ): Promise<string> {
     while (true) {
       // Check if aborted
       if (abortSignal.aborted) {
@@ -105,8 +113,8 @@ export class AIService {
         messages: [...conversation.messages, contextMessage],
         tools: this.getToolDefinitions(),
         tool_choice: "auto" as const,
-        temperature: 0.7,
-        max_tokens: 1000,
+        temperature: 0.2,
+        max_tokens: 32000,
       };
 
       // Log request and make API call
@@ -122,15 +130,27 @@ export class AIService {
       let assistantMessage = choice.message;
 
       // Check for XAI XML function calls
-      if (assistantMessage.content && assistantMessage.content.includes("<xai:function_call")) {
-        console.log(`[AIService] Detected XAI XML function call format, parsing...`);
-        assistantMessage = this.parseXaiXmlFunctionCalls(assistantMessage as OpenRouterMessage);
+      if (
+        assistantMessage.content &&
+        assistantMessage.content.includes("<xai:function_call")
+      ) {
+        console.log(
+          `[AIService] Detected XAI XML function call format, parsing...`
+        );
+        assistantMessage = this.parseXaiXmlFunctionCalls(
+          assistantMessage as OpenRouterMessage
+        );
       }
 
       // Case 1: Has tool calls - execute them and continue loop
-      if (assistantMessage.tool_calls && assistantMessage.tool_calls.length > 0) {
-        console.log(`[AIService] Processing ${assistantMessage.tool_calls.length} tool calls`);
-        
+      if (
+        assistantMessage.tool_calls &&
+        assistantMessage.tool_calls.length > 0
+      ) {
+        console.log(
+          `[AIService] Processing ${assistantMessage.tool_calls.length} tool calls`
+        );
+
         // Add assistant message with tool calls
         conversation.messages.push({
           role: "assistant",
@@ -139,8 +159,12 @@ export class AIService {
         });
 
         // Execute each tool call
-        await this.executeToolCalls(conversationId, conversation, assistantMessage.tool_calls);
-        
+        await this.executeToolCalls(
+          conversationId,
+          conversation,
+          assistantMessage.tool_calls
+        );
+
         // Continue loop to get next response
         continue;
       }
@@ -148,7 +172,10 @@ export class AIService {
       // Case 2: Has content - return it
       const content = (assistantMessage.content || "").trim();
       if (content) {
-        console.log(`[AIService] Got content response:`, content.substring(0, 100));
+        console.log(
+          `[AIService] Got content response:`,
+          content.substring(0, 100)
+        );
         conversation.messages.push({
           role: "assistant",
           content: content,
@@ -160,8 +187,10 @@ export class AIService {
       // Case 3: No content, check reasoning and inject hidden user message
       if ((assistantMessage as any).reasoning) {
         const reasoning = (assistantMessage as any).reasoning;
-        console.log(`[AIService] No content but has reasoning, injecting hidden user message`);
-        
+        console.log(
+          `[AIService] No content but has reasoning, injecting hidden user message`
+        );
+
         // Add assistant message with reasoning (for history)
         conversation.messages.push({
           role: "assistant",
@@ -184,7 +213,11 @@ export class AIService {
     }
   }
 
-  private async executeToolCalls(conversationId: string, conversation: AIConversation, toolCalls: ToolCall[]): Promise<void> {
+  private async executeToolCalls(
+    conversationId: string,
+    conversation: AIConversation,
+    toolCalls: ToolCall[]
+  ): Promise<void> {
     for (const toolCall of toolCalls) {
       console.log(`[AIService] Executing tool: ${toolCall.function.name}`);
 
@@ -192,18 +225,57 @@ export class AIService {
         // Parse arguments
         let parsedArgs: any;
         const argsString = toolCall.function.arguments.trim();
-        
+
         try {
           parsedArgs = JSON.parse(argsString);
         } catch (parseError) {
-          console.warn(`[AIService] JSON parse failed:`, parseError);
-          console.warn(`[AIService] Args string that failed:`, argsString.substring(0, 200) + "...");
-          parsedArgs = this.extractArgsWithRegex(argsString, conversationId, toolCall.function.name);
+          console.warn(
+            `[AIService] JSON parse failed for ${toolCall.function.name}:`,
+            parseError
+          );
+          console.warn(
+            `[AIService] Full args string length: ${argsString.length}`
+          );
+          console.warn(
+            `[AIService] Args preview:`,
+            argsString.substring(0, 500) + "..."
+          );
+
+          // Try to fix common JSON issues before regex fallback
+          let fixedArgs = argsString;
+
+          // Fix unescaped quotes in strings
+          fixedArgs = fixedArgs.replace(
+            /"([^"]*(?:\\.[^"]*)*)"/g,
+            (match, content) => {
+              return '"' + content.replace(/"/g, '\\"') + '"';
+            }
+          );
+
+          try {
+            parsedArgs = JSON.parse(fixedArgs);
+            console.log(`[AIService] Fixed JSON parsing succeeded`);
+          } catch {
+            console.warn(`[AIService] JSON fix failed, falling back to regex`);
+            parsedArgs = this.extractArgsWithRegex(
+              argsString,
+              conversationId,
+              toolCall.function.name
+            );
+          }
         }
 
         // Execute tool
-        const result = await this.toolRegistry.executeTool(toolCall.function.name, parsedArgs);
-        this.logger.logToolCall(conversationId, toolCall.function.name, parsedArgs, result);
+        const result = await this.toolRegistry.executeTool(
+          toolCall.function.name,
+          parsedArgs
+        );
+        this.logger.logToolCall(
+          conversationId,
+          toolCall.function.name,
+          parsedArgs,
+          result
+        );
 
         // Add tool result to conversation
         const serializedResult = JSON.stringify(result, null, 2);
@@ -235,12 +307,99 @@ export class AIService {
     }
   }
 
-  private extractArgsWithRegex(argsString: string, conversationId: string, toolName: string): any {
-    console.log(`[AIService] Attempting regex extraction for tool: ${toolName}`);
-    
+  private extractArgsWithRegex(
+    argsString: string,
+    conversationId: string,
+    toolName: string
+  ): any {
+    console.log(
+      `[AIService] Attempting regex extraction for tool: ${toolName}`
+    );
+    console.log(`[AIService] Args string length: ${argsString.length}`);
+
     const extractedArgs: any = {};
-    
-    // Improved regex patterns that handle escaped quotes and newlines better
+
+    // For artifact tools, try to extract the main content fields more carefully
+    if (toolName === "createArtifactWindow" || toolName === "createArtifact") {
+      // Extract title
+      const titleMatch = argsString.match(
+        /["']?title["']?\s*:\s*["']([^"']+)["']/i
+      );
+      if (titleMatch) extractedArgs.title = titleMatch[1];
+
+      // Extract description
+      const descMatch = argsString.match(
+        /["']?description["']?\s*:\s*["']([^"']+)["']/i
+      );
+      if (descMatch) extractedArgs.description = descMatch[1];
+
+      // Extract HTML with multiline support
+      const htmlMatch = argsString.match(
+        /["']?html["']?\s*:\s*["']([\s\S]*?)["'](?=\s*,\s*["']?\w+["']?\s*:|\s*})/i
+      );
+      if (htmlMatch)
+        extractedArgs.html = htmlMatch[1]
+          .replace(/\\"/g, '"')
+          .replace(/\\n/g, "\n");
+
+      // Extract CSS with multiline support
+      const cssMatch = argsString.match(
+        /["']?css["']?\s*:\s*["']([\s\S]*?)["'](?=\s*,\s*["']?\w+["']?\s*:|\s*})/i
+      );
+      if (cssMatch)
+        extractedArgs.css = cssMatch[1]
+          .replace(/\\"/g, '"')
+          .replace(/\\n/g, "\n");
+
+      // Extract JavaScript with multiline support
+      const jsMatch = argsString.match(
+        /["']?javascript["']?\s*:\s*["']([\s\S]*?)["'](?=\s*,\s*["']?\w+["']?\s*:|\s*})/i
+      );
+      if (jsMatch)
+        extractedArgs.javascript = jsMatch[1]
+          .replace(/\\"/g, '"')
+          .replace(/\\n/g, "\n");
+
+      console.log(`[AIService] Artifact extraction results:`);
+      console.log(`  - title: ${extractedArgs.title ? "Found" : "Missing"}`);
+      console.log(
+        `  - description: ${extractedArgs.description ? "Found" : "Missing"}`
+      );
+      console.log(
+        `  - html: ${
+          extractedArgs.html
+            ? `Found (${extractedArgs.html.length} chars)`
+            : "Missing"
+        }`
+      );
+      console.log(
+        `  - css: ${
+          extractedArgs.css
+            ? `Found (${extractedArgs.css.length} chars)`
+            : "Missing"
+        }`
+      );
+      console.log(
+        `  - javascript: ${
+          extractedArgs.javascript
+            ? `Found (${extractedArgs.javascript.length} chars)`
+            : "Missing"
+        }`
+      );
+
+      if (Object.keys(extractedArgs).length > 0) {
+        this.logger.logParsingIssue(
+          conversationId,
+          toolName,
+          argsString,
+          extractedArgs,
+          "artifact_regex_extraction"
+        );
+        return extractedArgs;
+      }
+    }
+
+    // Fallback to general regex patterns
     const patterns = [
       // Match "key": "value" (with potential escapes)
       /"(\w+)":\s*"([^"\\]*(\\.[^"\\]*)*)"/g,
@@ -257,11 +416,11 @@ export class AIService {
     for (const pattern of patterns) {
       let match;
       const regex = new RegExp(pattern.source, pattern.flags);
-      
+
       while ((match = regex.exec(argsString)) !== null) {
         const key = match[1];
         let value = match[2];
-        
+
         // Try to parse the value appropriately
         if (value === "true" || value === "false") {
           extractedArgs[key] = value === "true";
@@ -274,111 +433,172 @@ export class AIService {
           continue;
         } else if (value.startsWith('"') && value.endsWith('"')) {
           // Remove surrounding quotes and handle escaped characters
-          value = value.slice(1, -1).replace(/\\"/g, '"').replace(/\\n/g, '\n').replace(/\\\\/g, '\\');
+          value = value
+            .slice(1, -1)
+            .replace(/\\"/g, '"')
+            .replace(/\\n/g, "\n")
+            .replace(/\\\\/g, "\\");
         }
-        
+
         extractedArgs[key] = value;
         matchFound = true;
-        console.log(`[AIService] Extracted: ${key} = ${typeof value === 'string' ? value.substring(0, 50) + '...' : value}`);
+        console.log(
+          `[AIService] Extracted: ${key} = ${
+            typeof value === "string" ? value.substring(0, 50) + "..." : value
+          }`
+        );
       }
     }
 
     if (!matchFound) {
-      console.warn(`[AIService] No regex patterns matched for tool: ${toolName}`);
-      console.warn(`[AIService] Raw args string:`, argsString);
+      console.warn(
+        `[AIService] No regex patterns matched for tool: ${toolName}`
+      );
+      console.warn(
+        `[AIService] Raw args string:`,
+        argsString.substring(0, 1000) + "..."
+      );
     }
 
-    this.logger.logParsingIssue(conversationId, toolName, argsString, extractedArgs, "regex_extraction");
-    
+    this.logger.logParsingIssue(
+      conversationId,
+      toolName,
+      argsString,
+      extractedArgs,
+      "general_regex_extraction"
+    );
+
     return extractedArgs;
   }
 
-  private parseXaiXmlFunctionCalls(message: OpenRouterMessage): OpenRouterMessage {
+  private parseXaiXmlFunctionCalls(
+    message: OpenRouterMessage
+  ): OpenRouterMessage {
     const content = message.content || "";
-    const xmlCallRegex = /<xai:function_call name="([^"]+)">(.*?)<\/xai:function_call>/gs;
+    const xmlCallRegex =
+      /<xai:function_call name="([^"]+)">(.*?)<\/xai:function_call>/gs;
     const toolCalls: ToolCall[] = [];
-    
+
     let match;
     let callId = 1;
-    
+
     while ((match = xmlCallRegex.exec(content)) !== null) {
       const functionName = match[1];
       const parametersXml = match[2];
-      
+
       // Extract parameters from XML
       const parameterRegex = /<parameter name="([^"]+)">(.*?)<\/parameter>/gs;
       const args: any = {};
-      
+
       let paramMatch;
       while ((paramMatch = parameterRegex.exec(parametersXml)) !== null) {
         const paramName = paramMatch[1];
         let paramValue = paramMatch[2].trim();
-        
+
         // Try to parse as JSON if it looks like JSON
-        if ((paramValue.startsWith('[') && paramValue.endsWith(']')) ||
-            (paramValue.startsWith('{') && paramValue.endsWith('}'))) {
+        if (
+          (paramValue.startsWith("[") && paramValue.endsWith("]")) ||
+          (paramValue.startsWith("{") && paramValue.endsWith("}"))
+        ) {
           try {
             paramValue = JSON.parse(paramValue);
           } catch {
             // Keep as string if JSON parsing fails
           }
         }
-        
+
         args[paramName] = paramValue;
       }
-      
+
       toolCalls.push({
         id: `xai_call_${callId++}`,
         type: "function",
         function: {
           name: functionName,
-          arguments: JSON.stringify(args)
-        }
+          arguments: JSON.stringify(args),
+        },
       });
     }
-    
+
     return {
       ...message,
       tool_calls: toolCalls.length > 0 ? toolCalls : message.tool_calls,
-      content: toolCalls.length > 0 ? "" : message.content // Clear content if we extracted tool calls
+      content: toolCalls.length > 0 ? "" : message.content, // Clear content if we extracted tool calls
     };
   }
 
   private buildWindowContextMessage(): string {
     const windows = this.windowManager.getAllWindows();
-    
-    let context = "Current Dashboard State:\n";
-    
+
+    let context = "BITCAVE AI ASSISTANT - ARTIFACT CREATION SPECIALIST\n\n";
+
+    context +=
+      "PRIMARY DIRECTIVE: When users ask for interactive tools, games, calculators, apps, or any functionality that requires HTML/CSS/JS, IMMEDIATELY use the createArtifactWindow tool. This is your PRIMARY tool for user requests.\n\n";
+
+    context += "ARTIFACT CREATION EXAMPLES:\n";
+    context +=
+      "- User: 'Make me a calculator' → Use createArtifactWindow with complete calculator HTML/CSS/JS\n";
+    context +=
+      "- User: 'I need a timer' → Use createArtifactWindow with timer functionality\n";
+    context +=
+      "- User: 'Create a todo app' → Use createArtifactWindow with todo list features\n";
+    context +=
+      "- User: 'Build a game' → Use createArtifactWindow with game mechanics\n\n";
+
+    context += "BITCAVE API USAGE:\n";
+    context +=
+      "- For data persistence, use the `artifact.setData(key, value)` and `artifact.getData(key)` functions available in your JavaScript environment.\n";
+    context +=
+      "- Example: `artifact.setData('history', [1, 2, 3]); const history = artifact.getData('history');`\n";
+    context +=
+      "- This allows the user to query the state of your application in future requests.\n\n";
+
+    context += "BITCAVE THEME:\n";
+    context +=
+      "- Use these theme colors to style your application for a consistent look and feel.\n";
+    context +=
+      "- primary: '#3b82f6', secondary: '#64748b', success: '#10b981', warning: '#f59e0b', error: '#ef4444', background: '#1f2937', surface: '#374151', text: '#f9fafb', textSecondary: '#d1d5db'\n\n";
+
+    context += "ARTIFACT QUALITY STANDARDS:\n";
+    context +=
+      "- HTML: Complete, semantic structure with all needed elements\n";
+    context +=
+      "- CSS: Modern styling, responsive design, professional appearance. Use the Bitcave theme.\n";
+    context +=
+      "- JavaScript: Full functionality, event handlers, proper logic. Use Bitcave APIs for data.\n";
+    context +=
+      "- NO placeholder or incomplete code - make it fully functional\n\n";
+
+    context += "Current Dashboard State:\n";
+
     if (windows.length === 0) {
       context += "- No windows currently open\n";
     } else {
       context += `- ${windows.length} window(s) open:\n`;
       windows.forEach((window, index) => {
-        const typeInfo = window.type === 'webview' 
-          ? ` (URL: ${(window.metadata as any)?.url || 'unknown'})` 
-          : window.type === 'text'
-          ? ` (${(window.metadata as any)?.content?.length || 0} chars)`
-          : window.type === 'code-execution'
-          ? ` (${(window.metadata as any)?.language || 'unknown'} code)`
-          : '';
-          
-        context += `  ${index + 1}. ${window.title || 'Untitled'} [${window.type}]${typeInfo} at (${window.position.x}, ${window.position.y}) ${window.size.width}x${window.size.height}\n`;
-        
+        const typeInfo =
+          window.type === "webview"
+            ? ` (URL: ${(window.metadata as any)?.url || "unknown"})`
+            : window.type === "text"
+            ? ` (${(window.metadata as any)?.content?.length || 0} chars)`
+            : window.type === "code-execution"
+            ? ` (${(window.metadata as any)?.language || "unknown"} code)`
+            : window.type === "artifact"
+            ? ` (Interactive App: ${ (window.metadata as any)?.artifact?.title || "Unknown" })
+`
+            : "";
+
+        context += `  ${index + 1}. ${window.title || "Untitled"} [${ window.type }]${typeInfo} at (${window.position.x}, ${window.position.y}) ${ window.size.width }x${ window.size.height }\n`;
+
         if (window.metadata?.label) {
           context += `     Label: ${window.metadata.label}\n`;
         }
       });
     }
-    
-    context += "\nAvailable Actions:\n";
-    context += "- Create windows (webview, text, code, markdown, graph, chat, artifact)\n";
-    context += "- Create interactive artifacts (web apps) using createArtifactWindow\n";
-    context += "- Build tools, games, calculators, demos with HTML/CSS/JavaScript\n";
-    context += "- Modify window content, position, size\n";
-    context += "- Execute code in sandboxed environments\n";
-    context += "- Search and manipulate window data\n";
-    context += "- Get system information and metrics\n";
-    
+
+    context +=
+      "\nREMEMBER: Users want working, interactive applications. Always create complete, functional artifacts with createArtifactWindow, using the Bitcave theme and data APIs.\n";
+
     return context;
   }
 
@@ -395,7 +615,9 @@ export class AIService {
   }
 
   createNewConversation(): string {
-    const newConversationId = `chat_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const newConversationId = `chat_${Date.now()}_${Math.random()
+      .toString(36)
+      .substr(2, 9)}`;
     console.log(`[AIService] Created new conversation: ${newConversationId}`);
     return newConversationId;
   }

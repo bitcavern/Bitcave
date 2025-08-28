@@ -341,8 +341,8 @@ const APIKeyModal: React.FC<APIKeyModalProps> = ({
 };
 
 export const AISidebar: React.FC<AISidebarProps> = ({
-  windows,
-  onCreateTextWindow,
+  // windows,
+  // onCreateTextWindow,
   onWidthChange,
 }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);

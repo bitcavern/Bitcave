@@ -173,6 +173,7 @@ export const AI_TOOLS = {
       "readProjectFile",
       "searchMemory",
       "getMemoryContext",
+      "getArtifactData",
     ],
   },
 } as const;

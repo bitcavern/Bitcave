@@ -243,7 +243,21 @@ export class AIToolRegistry {
           );
         }
         const { artifactId, ...updates } = params;
-        return await this.artifactManager.updateArtifact(artifactId, updates);
+        const updatedArtifact = await this.artifactManager.updateArtifact(artifactId, updates);
+
+        // Find the window that contains this artifact and trigger an update
+        const window = this.windowManager.getAllWindows().find(w => w.metadata?.artifact?.id === artifactId);
+        if (window) {
+          const updatedWindow = await this.windowManager.updateWindow(window.id, {
+            metadata: {
+              ...window.metadata,
+              artifact: updatedArtifact
+            }
+          });
+          this.triggerWindowUpdated(updatedWindow);
+        }
+
+        return updatedArtifact;
       },
     });
 
@@ -339,8 +353,14 @@ export class AIToolRegistry {
     this.registerTool({
       name: "createArtifactWindow",
       description:
-        "**PRIMARY TOOL** Create and display an interactive web application in a window. Use this when users ask for: calculators, games, tools, widgets, MIDI controllers, todo apps, timers, charts, demos, or any interactive functionality. This creates a complete HTML/CSS/JS application and immediately shows it to the user in a dedicated window. ALWAYS use this instead of createArtifact when the user wants to see/use the artifact.",
+        "**PRIMARY TOOL FOR ALL USER REQUESTS** Create and display a fully functional interactive web application. Use this IMMEDIATELY when users ask for: calculators, games, tools, widgets, MIDI controllers, todo apps, timers, charts, demos, or ANY interactive functionality. NEVER say you will create something - just DO IT with this tool. This creates complete, working HTML/CSS/JS applications and immediately shows them to the user. You must include the html for the artifact in the html parameter on the first call, you must also include a title and description for the artifact. If necessary, javascript and css should be included in their respective parameters. It must ALL be included in the first call. ",
       parameters: {
+        html: {
+          type: "string",
+          required: true,
+          description:
+            "COMPLETE, FUNCTIONAL HTML structure with ALL UI elements, buttons, forms, displays, inputs, etc. Must be fully implemented - NO placeholders, NO incomplete parts. Include proper semantic HTML5 elements and full functionality.",
+        },
         title: {
           type: "string",
           required: true,
@@ -353,23 +373,17 @@ export class AIToolRegistry {
           description:
             "Detailed explanation of what this artifact does and its key features",
         },
-        html: {
-          type: "string",
-          required: true,
-          description:
-            "Complete HTML structure with all UI elements, buttons, forms, displays, etc. Use semantic HTML5 elements.",
-        },
         css: {
           type: "string",
           required: false,
           description:
-            "Modern CSS for styling, layout, animations, hover effects, and responsive design. Make it look polished and professional.",
+            "COMPLETE, POLISHED CSS for styling, layout, animations, hover effects, and responsive design. Make it look professional and fully styled - NO basic or minimal styling. Include colors, spacing, typography, and visual polish.",
         },
         javascript: {
           type: "string",
           required: false,
           description:
-            "JavaScript for all interactivity, event handling, calculations, animations, and dynamic behavior. Use modern ES6+ syntax.",
+            "COMPLETE, FUNCTIONAL JavaScript with ALL interactivity, event handlers, calculations, animations, and dynamic behavior implemented. NO placeholder functions, NO incomplete features - everything must work. Use modern ES6+ syntax and implement the full functionality requested by the user.",
         },
         dataTemplates: {
           type: "array",
@@ -1752,34 +1766,5 @@ export class AIToolRegistry {
       issues.push(`${field} not JSON-serializable; replaced with {}`);
       return {};
     }
-  }
-
-  private markdownToText(markdown: string): string {
-    return (
-      markdown
-        // Remove headers
-        .replace(/^#{1,6}\s+.*$/gm, "")
-        // Remove code blocks
-        .replace(/```[\s\S]*?```/g, "")
-        // Remove inline code
-        .replace(/`([^`]+)`/g, "$1")
-        // Remove links, keep text
-        .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
-        // Remove bold and italic
-        .replace(/\*\*([^*]+)\*\*/g, "$1")
-        .replace(/\*([^*]+)\*/g, "$1")
-        // Remove strikethrough
-        .replace(/~~([^~]+)~~/g, "$1")
-        // Remove blockquotes
-        .replace(/^>\s+.*$/gm, "")
-        // Remove list markers
-        .replace(/^[\s]*[-*+]\s+/gm, "")
-        .replace(/^[\s]*\d+\.\s+/gm, "")
-        // Remove horizontal rules
-        .replace(/^[\s]*[-*_]{3,}[\s]*$/gm, "")
-        // Clean up whitespace
-        .replace(/\n{3,}/g, "\n\n")
-        .replace(/^\s+|\s+$/g, "")
-    );
   }
 }

@@ -49,7 +49,7 @@ export const ArtifactWindow: React.FC<ArtifactWindowProps> = ({
     
     <script>
         // BitcaveAPI for artifact interaction
-        window.BitcaveAPI = {
+        window.artifact = {
             getData: async (key) => {
                 return new Promise((resolve) => {
                     const messageId = Date.now().toString();

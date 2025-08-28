@@ -51,13 +51,13 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   },
   {
     name: "createArtifactWindow",
-    description: "**PRIMARY TOOL** Create and display an interactive web application in a window. Use this when users ask for: calculators, games, tools, widgets, MIDI controllers, todo apps, timers, charts, demos, or any interactive functionality. This creates a complete HTML/CSS/JS application and immediately shows it to the user in a dedicated window. ALWAYS use this instead of createArtifact when the user wants to see/use the artifact.",
+    description: "**PRIMARY TOOL FOR ALL USER REQUESTS** Create and display a fully functional interactive web application. Use this IMMEDIATELY when users ask for: calculators, games, tools, widgets, MIDI controllers, todo apps, timers, charts, demos, or ANY interactive functionality. NEVER say you will create something - just DO IT with this tool. This creates complete, working HTML/CSS/JS applications and immediately shows them to the user.",
     parameters: {
       title: { type: "string", required: true, description: "Clear, descriptive title (e.g. 'MIDI Piano Controller', 'Pomodoro Timer', 'Scientific Calculator')" },
       description: { type: "string", required: true, description: "Detailed explanation of what this artifact does and its key features" },
-      html: { type: "string", required: true, description: "Complete HTML structure with all UI elements, buttons, forms, displays, etc. Use semantic HTML5 elements." },
-      css: { type: "string", required: false, description: "Modern CSS for styling, layout, animations, hover effects, and responsive design. Make it look polished and professional." },
-      javascript: { type: "string", required: false, description: "JavaScript for all interactivity, event handling, calculations, animations, and dynamic behavior. Use modern ES6+ syntax." },
+      html: { type: "string", required: true, description: "COMPLETE, FUNCTIONAL HTML structure with ALL UI elements, buttons, forms, displays, inputs, etc. Must be fully implemented - NO placeholders, NO incomplete parts. Include proper semantic HTML5 elements and full functionality." },
+      css: { type: "string", required: false, description: "COMPLETE, POLISHED CSS for styling, layout, animations, hover effects, and responsive design. Make it look professional and fully styled - NO basic or minimal styling. Include colors, spacing, typography, and visual polish." },
+      javascript: { type: "string", required: false, description: "COMPLETE, FUNCTIONAL JavaScript with ALL interactivity, event handlers, calculations, animations, and dynamic behavior implemented. NO placeholder functions, NO incomplete features - everything must work. Use modern ES6+ syntax and implement the full functionality requested by the user." },
       dataTemplates: { type: "array", required: false, description: "Data templates for persistent storage (e.g. [{id: 'settings', name: 'User Settings', defaultValue: {theme: 'dark'}, access: 'readwrite'}])" },
       dependencies: { type: "array", required: false, description: "CDN URLs for external libraries if needed (e.g. Chart.js, D3, Tone.js)" },
       windowPosition: { type: "object", required: false, description: "Window position as {x: number, y: number}, defaults to {x: 100, y: 100}" },
@@ -66,15 +66,15 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       type: "function",
       function: {
         name: "createArtifactWindow",
-        description: "**PRIMARY TOOL** Create and display an interactive web application in a window. Use this when users ask for: calculators, games, tools, widgets, MIDI controllers, todo apps, timers, charts, demos, or any interactive functionality. This creates a complete HTML/CSS/JS application and immediately shows it to the user in a dedicated window. ALWAYS use this instead of createArtifact when the user wants to see/use the artifact.",
+        description: "**PRIMARY TOOL FOR ALL USER REQUESTS** Create and display a fully functional interactive web application. Use this IMMEDIATELY when users ask for: calculators, games, tools, widgets, MIDI controllers, todo apps, timers, charts, demos, or ANY interactive functionality. NEVER say you will create something - just DO IT with this tool. This creates complete, working HTML/CSS/JS applications and immediately shows them to the user.",
         parameters: {
           type: "object",
           properties: {
             title: { type: "string", description: "Clear, descriptive title (e.g. 'MIDI Piano Controller', 'Pomodoro Timer', 'Scientific Calculator')" },
             description: { type: "string", description: "Detailed explanation of what this artifact does and its key features" },
-            html: { type: "string", description: "Complete HTML structure with all UI elements, buttons, forms, displays, etc. Use semantic HTML5 elements." },
-            css: { type: "string", description: "Modern CSS for styling, layout, animations, hover effects, and responsive design. Make it look polished and professional." },
-            javascript: { type: "string", description: "JavaScript for all interactivity, event handling, calculations, animations, and dynamic behavior. Use modern ES6+ syntax." },
+            html: { type: "string", description: "COMPLETE, FUNCTIONAL HTML structure with ALL UI elements, buttons, forms, displays, inputs, etc. Must be fully implemented - NO placeholders, NO incomplete parts. Include proper semantic HTML5 elements and full functionality." },
+            css: { type: "string", description: "COMPLETE, POLISHED CSS for styling, layout, animations, hover effects, and responsive design. Make it look professional and fully styled - NO basic or minimal styling. Include colors, spacing, typography, and visual polish." },
+            javascript: { type: "string", description: "COMPLETE, FUNCTIONAL JavaScript with ALL interactivity, event handlers, calculations, animations, and dynamic behavior implemented. NO placeholder functions, NO incomplete features - everything must work. Use modern ES6+ syntax and implement the full functionality requested by the user." },
             dataTemplates: { type: "array", items: { type: "object" }, description: "Data templates for persistent storage (e.g. [{id: 'settings', name: 'User Settings', defaultValue: {theme: 'dark'}, access: 'readwrite'}])" },
             dependencies: { type: "array", items: { type: "string" }, description: "CDN URLs for external libraries if needed (e.g. Chart.js, D3, Tone.js)" },
             windowPosition: { type: "object", properties: { x: { type: "number" }, y: { type: "number" } }, description: "Window position as {x: number, y: number}, defaults to {x: 100, y: 100}" },
@@ -514,6 +514,58 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
             },
           },
           required: ["task", "steps"],
+        },
+      },
+    },
+  },
+  {
+    name: "getArtifactData",
+    description: "Get the data stored in an artifact by its ID and a key. This is useful for retrieving the state of an artifact, such as the last calculation result from a calculator.",
+    parameters: {
+      artifactId: { type: "string", required: true, description: "The ID of the artifact to get data from." },
+      key: { type: "string", required: true, description: "The key of the data to retrieve." },
+    },
+    openRouterTool: {
+      type: "function",
+      function: {
+        name: "getArtifactData",
+        description: "Get the data stored in an artifact by its ID and a key.",
+        parameters: {
+          type: "object",
+          properties: {
+            artifactId: { type: "string", description: "The ID of the artifact to get data from." },
+            key: { type: "string", description: "The key of the data to retrieve." },
+          },
+          required: ["artifactId", "key"],
+        },
+      },
+    },
+  },
+  {
+    name: "updateArtifact",
+    description: "Update an existing artifact's content (HTML, CSS, JavaScript) or data. This is useful for making changes to an artifact that has already been created.",
+    parameters: {
+      artifactId: { type: "string", required: true, description: "The ID of the artifact to update." },
+      html: { type: "string", required: false, description: "The new HTML content." },
+      css: { type: "string", required: false, description: "The new CSS content." },
+      javascript: { type: "string", required: false, description: "The new JavaScript content." },
+      data: { type: "object", required: false, description: "The new data to set." },
+    },
+    openRouterTool: {
+      type: "function",
+      function: {
+        name: "updateArtifact",
+        description: "Update an existing artifact's content or data.",
+        parameters: {
+          type: "object",
+          properties: {
+            artifactId: { type: "string", description: "The ID of the artifact to update." },
+            html: { type: "string", description: "The new HTML content." },
+            css: { type: "string", description: "The new CSS content." },
+            javascript: { type: "string", description: "The new JavaScript content." },
+            data: { type: "object", description: "The new data to set." },
+          },
+          required: ["artifactId"],
         },
       },
     },
