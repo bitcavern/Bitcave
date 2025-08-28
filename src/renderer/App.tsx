@@ -3,6 +3,8 @@ import { Canvas } from "./canvas/Canvas";
 import { Toolbar } from "./components/Toolbar";
 import { WindowRenderer } from "./components/WindowRenderer";
 import { AISidebar } from "./components/AISidebar";
+import { LeftSidebar } from "./components/LeftSidebar";
+import { ProjectLauncher } from "./components/ProjectLauncher";
 import type {
   BaseWindow,
   CanvasState,
@@ -12,16 +14,25 @@ import type {
 } from "@/shared/types";
 import { APP_CONFIG } from "@/shared/constants";
 
+// Grid snapping utility function
+const snapToGrid = (value: number, gridSize: number): number => {
+  return Math.round(value / gridSize) * gridSize;
+};
+
 export const App: React.FC = () => {
+  const [currentProject, setCurrentProject] = useState<string | null>(null);
   const [windows, setWindows] = useState<BaseWindow[]>([]);
   const [canvasState, setCanvasState] = useState<CanvasState>({
     viewport: APP_CONFIG.canvasDefaults.viewport,
-    dimensions: { width: window.innerWidth, height: window.innerHeight }, // Full width since sidebar is floating
+    dimensions: { width: window.innerWidth, height: window.innerHeight },
   });
   const [sidebarWidth, setSidebarWidth] = useState<number>(300);
   const [selectedWindowId, setSelectedWindowId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [toasts, setToasts] = useState<{ id: string; message: string }[]>([]);
+  const [snapToGridEnabled, setSnapToGridEnabled] = useState<boolean>(APP_CONFIG.grid.snapEnabled);
+  const [leftSidebarVisible, setLeftSidebarVisible] = useState(false);
+  const [leftSidebarWidth, setLeftSidebarWidth] = useState(400);
 
   // Code execution function
   const executeCode = async (
@@ -41,17 +52,23 @@ export const App: React.FC = () => {
     }
   };
 
-  // Initialize the app and load existing windows
+  // Initialize the app and check for current project
   useEffect(() => {
     const initializeApp = async () => {
       try {
-        // Load existing windows from main process
-        const result = await window.electronAPI.invoke("windows:get-all");
-        if (result.success) {
-          setWindows(result.data || []);
+        // Check if there's a current project
+        const projectResult = await window.electronAPI.invoke("projects:current");
+        if (projectResult.success && projectResult.data) {
+          setCurrentProject(projectResult.data.id);
+          
+          // Load existing windows from main process
+          const windowsResult = await window.electronAPI.invoke("windows:get-all");
+          if (windowsResult.success) {
+            setWindows(windowsResult.data || []);
+          }
         }
       } catch (error) {
-        console.error("Failed to load windows:", error);
+        console.error("Failed to load app state:", error);
       } finally {
         setIsLoading(false);
       }
@@ -110,15 +127,19 @@ export const App: React.FC = () => {
       setCanvasState((prev) => ({
         ...prev,
         dimensions: {
-          width: window.innerWidth,
+          width: window.innerWidth - (leftSidebarVisible ? leftSidebarWidth : 0),
           height: window.innerHeight,
-        }, // Full width since sidebar is floating
+        },
       }));
     };
 
     window.addEventListener("resize", handleResize);
+    
+    // Update dimensions when sidebar state changes
+    handleResize();
+    
     return () => window.removeEventListener("resize", handleResize);
-  }, []);
+  }, [leftSidebarVisible, leftSidebarWidth]);
 
   const addWindowToState = (newWindow: BaseWindow) => {
     setWindows((prev) => {
@@ -132,13 +153,21 @@ export const App: React.FC = () => {
 
   const handleCreateWindow = async (type: WindowType) => {
     try {
+      const baseX = canvasState.viewport.x + 100;
+      const baseY = canvasState.viewport.y + 100;
+      
+      // Snap initial position to grid if enabled
+      const x = snapToGridEnabled 
+        ? snapToGrid(baseX, APP_CONFIG.grid.size)
+        : baseX;
+      const y = snapToGridEnabled
+        ? snapToGrid(baseY, APP_CONFIG.grid.size) 
+        : baseY;
+      
       const result = await window.electronAPI.invoke("window:create", {
         type,
         config: {
-          position: {
-            x: canvasState.viewport.x + 100,
-            y: canvasState.viewport.y + 100,
-          },
+          position: { x, y },
         },
       });
 
@@ -264,14 +293,22 @@ export const App: React.FC = () => {
 
   const handleCreateTextWindow = async (label: string, content?: string) => {
     try {
+      const baseX = canvasState.viewport.x + 100;
+      const baseY = canvasState.viewport.y + 100;
+      
+      // Snap initial position to grid if enabled
+      const x = snapToGridEnabled 
+        ? snapToGrid(baseX, APP_CONFIG.grid.size)
+        : baseX;
+      const y = snapToGridEnabled
+        ? snapToGrid(baseY, APP_CONFIG.grid.size) 
+        : baseY;
+      
       const result = await window.electronAPI.invoke("window:create", {
         type: "text",
         config: {
           title: label,
-          position: {
-            x: canvasState.viewport.x + 100,
-            y: canvasState.viewport.y + 100,
-          },
+          position: { x, y },
           metadata: {
             label,
             content: content || "",
@@ -284,6 +321,27 @@ export const App: React.FC = () => {
       }
     } catch (error) {
       console.error("Failed to create text window:", error);
+    }
+  };
+
+  const handleProjectOpen = async (projectId: string) => {
+    try {
+      setIsLoading(true);
+      
+      const result = await window.electronAPI.invoke("projects:open", { projectId });
+      if (result.success) {
+        setCurrentProject(projectId);
+        
+        // Load windows for the opened project
+        const windowsResult = await window.electronAPI.invoke("windows:get-all");
+        if (windowsResult.success) {
+          setWindows(windowsResult.data || []);
+        }
+      }
+    } catch (error) {
+      console.error("Failed to open project:", error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -320,6 +378,11 @@ export const App: React.FC = () => {
     );
   }
 
+  // Show project launcher if no project is selected
+  if (!currentProject) {
+    return <ProjectLauncher onProjectOpen={handleProjectOpen} />;
+  }
+
   return (
     <div style={{ width: "100%", height: "100%", position: "relative" }}>
       {/* Grabbable title bar area */}
@@ -327,8 +390,8 @@ export const App: React.FC = () => {
         style={{
           position: "fixed",
           top: 0,
-          left: 0,
-          right: 0, // Full width since sidebar is floating
+          left: leftSidebarVisible ? `${leftSidebarWidth}px` : "0",
+          right: 0,
           height: "40px",
           backgroundColor: "rgba(31, 41, 55, 0.2)",
           backdropFilter: "blur(10px)",
@@ -342,12 +405,20 @@ export const App: React.FC = () => {
           color: "#9ca3af",
           fontSize: "14px",
           fontWeight: "500",
+          transition: "left 0.3s ease",
         }}
       >
         Bitcave!
       </div>
 
-      <div style={{ width: "100%", height: "100%" }}>
+      <div 
+        style={{ 
+          width: "100%", 
+          height: "100%",
+          marginLeft: leftSidebarVisible ? `${leftSidebarWidth}px` : "0",
+          transition: "margin-left 0.3s ease"
+        }}
+      >
         <Canvas
           state={canvasState}
           onViewportChange={handleCanvasViewportChange}
@@ -363,6 +434,7 @@ export const App: React.FC = () => {
               onResize={(size) => handleResizeWindow(window.id, size)}
               onUpdate={(updates) => handleUpdateWindow(window.id, updates)}
               onExecuteCode={executeCode}
+              snapToGrid={snapToGridEnabled}
             />
           ))}
         </Canvas>
@@ -375,6 +447,18 @@ export const App: React.FC = () => {
         canvasState={canvasState}
         windows={windows}
         onRestoreWindow={handleRestoreWindow}
+        snapToGrid={snapToGridEnabled}
+        onToggleSnapToGrid={() => setSnapToGridEnabled(!snapToGridEnabled)}
+        leftSidebarVisible={leftSidebarVisible}
+        onToggleLeftSidebar={() => setLeftSidebarVisible(!leftSidebarVisible)}
+        leftSidebarWidth={leftSidebarWidth}
+      />
+
+      <LeftSidebar
+        isVisible={leftSidebarVisible}
+        onToggle={() => setLeftSidebarVisible(!leftSidebarVisible)}
+        onWidthChange={(w) => setLeftSidebarWidth(Math.round(w))}
+        initialWidth={leftSidebarWidth}
       />
 
       <AISidebar

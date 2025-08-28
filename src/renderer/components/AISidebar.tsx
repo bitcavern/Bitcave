@@ -350,9 +350,11 @@ export const AISidebar: React.FC<AISidebarProps> = ({
   const [isProcessing, setIsProcessing] = useState(false);
   const [isConfigured, setIsConfigured] = useState(false);
   const [showAPIKeyModal, setShowAPIKeyModal] = useState(false);
-  const [conversationId] = useState("main"); // Single conversation for now
+  const [conversationId, setConversationId] = useState("main"); // Current conversation ID
   const [isResizing, setIsResizing] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(380);
+  const [abortController, setAbortController] =
+    useState<AbortController | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
   const resizeStartX = useRef<number>(0);
@@ -360,6 +362,34 @@ export const AISidebar: React.FC<AISidebarProps> = ({
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  const startNewChat = async () => {
+    try {
+      const result = await (window as any).electronAPI.invoke(
+        "ai:new-conversation"
+      );
+      if (result.success) {
+        const newConversationId = result.data;
+        setConversationId(newConversationId);
+        setMessages([]);
+
+        // Add welcome message for new conversation
+        if (isConfigured) {
+          setMessages([
+            {
+              id: "welcome",
+              role: "system",
+              content:
+                "🔑 Bit Assistant ready! I can help you create and manage text windows, read content, and organize your workspace. What would you like to do?",
+              timestamp: new Date(),
+            },
+          ]);
+        }
+      }
+    } catch (error) {
+      console.error("Failed to start new chat:", error);
+    }
   };
 
   // Check if AI is configured on mount
@@ -487,6 +517,10 @@ export const AISidebar: React.FC<AISidebarProps> = ({
     setInputValue("");
     setIsProcessing(true);
 
+    // Create abort controller for this request
+    const controller = new AbortController();
+    setAbortController(controller);
+
     try {
       const result = await window.electronAPI.invoke("ai:chat", {
         conversationId,
@@ -511,15 +545,20 @@ export const AISidebar: React.FC<AISidebarProps> = ({
         setMessages((prev) => [...prev, errorMessage]);
       }
     } catch (error) {
-      const errorMessage: ChatMessage = {
-        id: (Date.now() + 1).toString(),
-        role: "system",
-        content: `Failed to communicate with Bit: ${(error as Error).message}`,
-        timestamp: new Date(),
-      };
-      setMessages((prev) => [...prev, errorMessage]);
+      if ((error as Error).name !== "AbortError") {
+        const errorMessage: ChatMessage = {
+          id: (Date.now() + 1).toString(),
+          role: "system",
+          content: `Failed to communicate with Bit: ${
+            (error as Error).message
+          }`,
+          timestamp: new Date(),
+        };
+        setMessages((prev) => [...prev, errorMessage]);
+      }
     } finally {
       setIsProcessing(false);
+      setAbortController(null);
     }
   };
 
@@ -614,21 +653,50 @@ export const AISidebar: React.FC<AISidebarProps> = ({
               Bit Assistant
             </h3>
           </div>
-          <button
-            onClick={() => setShowAPIKeyModal(true)}
-            style={{
-              padding: "4px 8px",
-              borderRadius: "4px",
-              border: "1px solid #374151",
-              backgroundColor: "transparent",
-              color: "#9ca3af",
-              fontSize: "12px",
-              cursor: "pointer",
-            }}
-            title="Configure API Key"
-          >
-            ⚙️
-          </button>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <button
+              onClick={startNewChat}
+              style={{
+                padding: "4px 8px",
+                borderRadius: "4px",
+                border: "1px solid #374151",
+                backgroundColor: "transparent",
+                color: "#9ca3af",
+                fontSize: "12px",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: "4px",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = "#374151";
+                e.currentTarget.style.color = "#f3f4f6";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = "transparent";
+                e.currentTarget.style.color = "#9ca3af";
+              }}
+              title="Start New Chat"
+            >
+              <span>➕</span>
+              <span>New Chat</span>
+            </button>
+            <button
+              onClick={() => setShowAPIKeyModal(true)}
+              style={{
+                padding: "4px 8px",
+                borderRadius: "4px",
+                border: "1px solid #374151",
+                backgroundColor: "transparent",
+                color: "#9ca3af",
+                fontSize: "12px",
+                cursor: "pointer",
+              }}
+              title="Configure API Key"
+            >
+              ⚙️
+            </button>
+          </div>
         </div>
         <p
           style={{
@@ -638,7 +706,9 @@ export const AISidebar: React.FC<AISidebarProps> = ({
           }}
         >
           {isConfigured
-            ? "🔑 Ready to assist with windows and content"
+            ? `🔑 Ready to assist with windows and content • Chat: ${
+                conversationId === "main" ? "Main" : "New"
+              }`
             : "Click ⚙️ to configure API key"}
         </p>
       </div>
@@ -722,7 +792,7 @@ export const AISidebar: React.FC<AISidebarProps> = ({
             onKeyDown={handleKeyDown}
             placeholder={
               isConfigured
-                ? "Ask Bit to create or read text windows... (Enter to send, Shift+Enter for new line)"
+                ? "Move with me..."
                 : "Configure API key to start chatting..."
             }
             disabled={isProcessing || !isConfigured}
@@ -749,7 +819,49 @@ export const AISidebar: React.FC<AISidebarProps> = ({
               e.target.style.borderColor = "#374151";
             }}
           />
-          <div style={{ display: "flex", justifyContent: "flex-end" }}>
+          <div
+            style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}
+          >
+            {isProcessing && abortController && (
+              <button
+                type="button"
+                onClick={async () => {
+                  abortController.abort();
+                  setAbortController(null);
+                  setIsProcessing(false);
+
+                  // Also abort on the backend
+                  try {
+                    await window.electronAPI.invoke("ai:abort", {
+                      conversationId,
+                    });
+                  } catch (error) {
+                    console.error("Failed to abort on backend:", error);
+                  }
+
+                  const abortMessage: ChatMessage = {
+                    id: (Date.now() + 1).toString(),
+                    role: "system",
+                    content: "Request aborted by user",
+                    timestamp: new Date(),
+                  };
+                  setMessages((prev) => [...prev, abortMessage]);
+                }}
+                style={{
+                  padding: "8px 16px",
+                  borderRadius: "6px",
+                  border: "none",
+                  backgroundColor: "#dc2626",
+                  color: "#f9fafb",
+                  fontSize: "14px",
+                  cursor: "pointer",
+                  transition: "background-color 0.2s",
+                  fontWeight: "500",
+                }}
+              >
+                Abort
+              </button>
+            )}
             <button
               type="submit"
               disabled={!inputValue.trim() || isProcessing || !isConfigured}

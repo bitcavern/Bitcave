@@ -84,7 +84,7 @@ export class CodeExecutionSandbox {
       `);
       
       const result = script.runInContext(context, {
-        timeout: timeout,
+        timeout: request.timeout || 5000,
         displayErrors: true,
       });
       

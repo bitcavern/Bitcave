@@ -11,6 +11,11 @@ export const APP_CONFIG = {
     maxZoom: 5.0,
     viewport: { x: 0, y: 0, zoom: 1.0 },
   },
+  grid: {
+    size: 20,
+    enabled: true,
+    snapEnabled: true,
+  },
 } as const;
 
 // Window type configurations

@@ -9,6 +9,11 @@ interface ToolbarProps {
   canvasState: CanvasState;
   windows: BaseWindow[];
   onRestoreWindow?: (windowId: string) => void;
+  snapToGrid?: boolean;
+  onToggleSnapToGrid?: () => void;
+  leftSidebarVisible?: boolean;
+  onToggleLeftSidebar?: () => void;
+  leftSidebarWidth?: number;
 }
 
 export const Toolbar: React.FC<ToolbarProps> = ({
@@ -18,6 +23,11 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   canvasState,
   windows,
   onRestoreWindow,
+  snapToGrid = false,
+  onToggleSnapToGrid,
+  leftSidebarVisible = false,
+  onToggleLeftSidebar,
+  leftSidebarWidth = 400,
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [showMinimized, setShowMinimized] = useState(false);
@@ -65,8 +75,9 @@ export const Toolbar: React.FC<ToolbarProps> = ({
       style={{
         position: "fixed",
         top: "48px", // Account for 32px title bar + 16px spacing
-        left: "20px",
+        left: leftSidebarVisible ? `${leftSidebarWidth + 20}px` : "20px",
         zIndex: 100,
+        transition: "left 0.3s ease",
         backdropFilter: "blur(10px)",
         backgroundColor: "rgba(31, 41, 55, 0.2)",
         border: "1px solid #4b5563",
@@ -423,6 +434,68 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             </span>
           )}
         </div>
+
+        {/* Left Sidebar Toggle */}
+        {onToggleLeftSidebar && (
+          <button
+            onClick={onToggleLeftSidebar}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              padding: "6px 10px",
+              backgroundColor: leftSidebarVisible ? "#3b82f6" : "#374151",
+              color: "white",
+              border: "none",
+              borderRadius: "6px",
+              cursor: "pointer",
+              fontSize: "12px",
+              fontWeight: "500",
+              transition: "all 0.2s",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = leftSidebarVisible ? "#2563eb" : "#4b5563";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = leftSidebarVisible ? "#3b82f6" : "#374151";
+            }}
+            title={leftSidebarVisible ? "Hide webview sidebar" : "Show webview sidebar"}
+          >
+            <span style={{ fontSize: "14px" }}>🌐</span>
+            <span>Browser</span>
+          </button>
+        )}
+
+        {/* Grid Snap Toggle */}
+        {onToggleSnapToGrid && (
+          <button
+            onClick={onToggleSnapToGrid}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              padding: "6px 10px",
+              backgroundColor: snapToGrid ? "#059669" : "#374151",
+              color: "white",
+              border: "none",
+              borderRadius: "6px",
+              cursor: "pointer",
+              fontSize: "12px",
+              fontWeight: "500",
+              transition: "all 0.2s",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = snapToGrid ? "#047857" : "#4b5563";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = snapToGrid ? "#059669" : "#374151";
+            }}
+            title={snapToGrid ? "Disable grid snapping" : "Enable grid snapping"}
+          >
+            <span style={{ fontSize: "14px" }}>⊞</span>
+            <span>{snapToGrid ? "Grid ON" : "Grid OFF"}</span>
+          </button>
+        )}
 
         {/* Bit Status Indicator */}
         {/* <div

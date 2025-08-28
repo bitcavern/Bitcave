@@ -17,6 +17,74 @@ export interface ToolDefinition {
 
 export const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
+    name: "createArtifact",
+    description: "Create a new interactive artifact (web application/component). Use this for creating interactive tools like calculators, games, demos, data visualizations, MIDI controllers, todo apps, etc. This creates complete web applications with HTML, CSS, and JavaScript that run in a sandboxed environment.",
+    parameters: {
+      title: { type: "string", required: true, description: "Descriptive title for the artifact (e.g. 'MIDI Controller', 'Todo App', 'Calculator')" },
+      description: { type: "string", required: true, description: "What this artifact does and its key features" },
+      html: { type: "string", required: true, description: "Complete HTML structure with semantic elements, forms, buttons, etc. Include all necessary DOM elements for interactivity." },
+      css: { type: "string", required: false, description: "CSS styles for layout, appearance, animations, and responsive design. Use modern CSS features." },
+      javascript: { type: "string", required: false, description: "JavaScript code for interactivity, event handlers, data manipulation, and dynamic behavior. Can use modern ES6+ features." },
+      dataTemplates: { type: "array", required: false, description: "Array of data template objects for persistent data storage (e.g. user settings, saved data, recorded tracks)" },
+      dependencies: { type: "array", required: false, description: "External JavaScript library URLs (e.g. ['https://cdn.jsdelivr.net/npm/chart.js', 'https://unpkg.com/react@18/umd/react.production.min.js'])" },
+    },
+    openRouterTool: {
+      type: "function",
+      function: {
+        name: "createArtifact",
+        description: "Create a new interactive artifact (web application/component). Use this for creating interactive tools like calculators, games, demos, data visualizations, MIDI controllers, todo apps, etc. This creates complete web applications with HTML, CSS, and JavaScript that run in a sandboxed environment.",
+        parameters: {
+          type: "object",
+          properties: {
+            title: { type: "string", description: "Descriptive title for the artifact (e.g. 'MIDI Controller', 'Todo App', 'Calculator')" },
+            description: { type: "string", description: "What this artifact does and its key features" },
+            html: { type: "string", description: "Complete HTML structure with semantic elements, forms, buttons, etc. Include all necessary DOM elements for interactivity." },
+            css: { type: "string", description: "CSS styles for layout, appearance, animations, and responsive design. Use modern CSS features." },
+            javascript: { type: "string", description: "JavaScript code for interactivity, event handlers, data manipulation, and dynamic behavior. Can use modern ES6+ features." },
+            dataTemplates: { type: "array", items: { type: "object" }, description: "Array of data template objects for persistent data storage (e.g. user settings, saved data, recorded tracks)" },
+            dependencies: { type: "array", items: { type: "string" }, description: "External JavaScript library URLs (e.g. ['https://cdn.jsdelivr.net/npm/chart.js', 'https://unpkg.com/react@18/umd/react.production.min.js'])" },
+          },
+          required: ["title", "description", "html"],
+        },
+      },
+    },
+  },
+  {
+    name: "createArtifactWindow",
+    description: "**PRIMARY TOOL** Create and display an interactive web application in a window. Use this when users ask for: calculators, games, tools, widgets, MIDI controllers, todo apps, timers, charts, demos, or any interactive functionality. This creates a complete HTML/CSS/JS application and immediately shows it to the user in a dedicated window. ALWAYS use this instead of createArtifact when the user wants to see/use the artifact.",
+    parameters: {
+      title: { type: "string", required: true, description: "Clear, descriptive title (e.g. 'MIDI Piano Controller', 'Pomodoro Timer', 'Scientific Calculator')" },
+      description: { type: "string", required: true, description: "Detailed explanation of what this artifact does and its key features" },
+      html: { type: "string", required: true, description: "Complete HTML structure with all UI elements, buttons, forms, displays, etc. Use semantic HTML5 elements." },
+      css: { type: "string", required: false, description: "Modern CSS for styling, layout, animations, hover effects, and responsive design. Make it look polished and professional." },
+      javascript: { type: "string", required: false, description: "JavaScript for all interactivity, event handling, calculations, animations, and dynamic behavior. Use modern ES6+ syntax." },
+      dataTemplates: { type: "array", required: false, description: "Data templates for persistent storage (e.g. [{id: 'settings', name: 'User Settings', defaultValue: {theme: 'dark'}, access: 'readwrite'}])" },
+      dependencies: { type: "array", required: false, description: "CDN URLs for external libraries if needed (e.g. Chart.js, D3, Tone.js)" },
+      windowPosition: { type: "object", required: false, description: "Window position as {x: number, y: number}, defaults to {x: 100, y: 100}" },
+    },
+    openRouterTool: {
+      type: "function",
+      function: {
+        name: "createArtifactWindow",
+        description: "**PRIMARY TOOL** Create and display an interactive web application in a window. Use this when users ask for: calculators, games, tools, widgets, MIDI controllers, todo apps, timers, charts, demos, or any interactive functionality. This creates a complete HTML/CSS/JS application and immediately shows it to the user in a dedicated window. ALWAYS use this instead of createArtifact when the user wants to see/use the artifact.",
+        parameters: {
+          type: "object",
+          properties: {
+            title: { type: "string", description: "Clear, descriptive title (e.g. 'MIDI Piano Controller', 'Pomodoro Timer', 'Scientific Calculator')" },
+            description: { type: "string", description: "Detailed explanation of what this artifact does and its key features" },
+            html: { type: "string", description: "Complete HTML structure with all UI elements, buttons, forms, displays, etc. Use semantic HTML5 elements." },
+            css: { type: "string", description: "Modern CSS for styling, layout, animations, hover effects, and responsive design. Make it look polished and professional." },
+            javascript: { type: "string", description: "JavaScript for all interactivity, event handling, calculations, animations, and dynamic behavior. Use modern ES6+ syntax." },
+            dataTemplates: { type: "array", items: { type: "object" }, description: "Data templates for persistent storage (e.g. [{id: 'settings', name: 'User Settings', defaultValue: {theme: 'dark'}, access: 'readwrite'}])" },
+            dependencies: { type: "array", items: { type: "string" }, description: "CDN URLs for external libraries if needed (e.g. Chart.js, D3, Tone.js)" },
+            windowPosition: { type: "object", properties: { x: { type: "number" }, y: { type: "number" } }, description: "Window position as {x: number, y: number}, defaults to {x: 100, y: 100}" },
+          },
+          required: ["title", "description", "html"],
+        },
+      },
+    },
+  },
+  {
     name: "createTextWindow",
     description:
       "Create a new text window with a label and optional initial content",

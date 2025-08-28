@@ -129,7 +129,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   }, [handleWheel, handleMouseMove, handleMouseUp]);
 
   // Canvas grid pattern
-  const gridSize = 50 * state.viewport.zoom;
+  const gridSize = APP_CONFIG.grid.size * state.viewport.zoom;
   const gridOffsetX = state.viewport.x % gridSize;
   const gridOffsetY = state.viewport.y % gridSize;
 

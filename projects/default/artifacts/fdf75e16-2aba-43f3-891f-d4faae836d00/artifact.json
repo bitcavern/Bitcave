@@ -1,0 +1,8 @@
+{
+  "id": "fdf75e16-2aba-43f3-891f-d4faae836d00",
+  "title": "Test Artifact",
+  "description": "This is a test artifact.",
+  "html": "<h1>Hello, World!</h1>",
+  "css": "h1 { color: red; }",
+  "javascript": "console.log(\"Hello from the artifact!\");"
+}

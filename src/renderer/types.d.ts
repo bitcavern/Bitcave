@@ -16,3 +16,10 @@ declare global {
     };
   }
 }
+
+// Add webview element support
+declare namespace JSX {
+  interface IntrinsicElements {
+    webview: any;
+  }
+}

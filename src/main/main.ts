@@ -5,6 +5,8 @@ import { WindowManager } from "./window-manager";
 import { AIToolRegistry } from "./ai-tools/registry";
 import { AIService } from "./ai/ai-service";
 import { WebviewManager } from "./webview-manager";
+import { ProjectManager } from "./projects/project-manager";
+import { ArtifactManager } from "./artifacts/artifact-manager";
 
 // Load environment variables
 dotenv.config();
@@ -16,6 +18,8 @@ class BitcaveApp {
   private aiToolRegistry: AIToolRegistry;
   private aiService: AIService;
   private webviewManager: WebviewManager;
+  private projectManager: ProjectManager;
+  private artifactManager: ArtifactManager | null = null;
   private selectedWindowId: string | null = null;
 
   constructor() {
@@ -23,6 +27,7 @@ class BitcaveApp {
     this.aiToolRegistry = new AIToolRegistry(this.windowManager);
     this.aiService = new AIService(this.aiToolRegistry, this.windowManager);
     this.webviewManager = new WebviewManager();
+    this.projectManager = new ProjectManager();
 
     // Initialize with environment API key if available
     const envApiKey = process.env.OPENROUTER_API_KEY;
@@ -30,15 +35,20 @@ class BitcaveApp {
       console.log("Using OpenRouter API key from environment variable");
       this.aiService.setApiKey(envApiKey);
     }
-
-    this.setupEventHandlers();
   }
 
   public async initialize(): Promise<void> {
     await app.whenReady();
+    
+    // Initialize project manager first
+    await this.projectManager.initialize();
+    this.projectManager.setWindowManager(this.windowManager);
+    
     this.createMainWindow();
     this.setupIPCHandlers();
-    this.setupHotReload();
+    await this.setupHotReload();
+    this.setupEventHandlers();
+    this.setupResetShortcut();
   }
 
   private createMainWindow(): void {
@@ -50,6 +60,7 @@ class BitcaveApp {
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
+        webviewTag: true, // Enable webview tags
         preload: path.join(__dirname, "preload.js"),
       },
       titleBarStyle: "hiddenInset",
@@ -88,10 +99,10 @@ class BitcaveApp {
     });
   }
 
-  private setupHotReload(): void {
+  private async setupHotReload(): Promise<void> {
     if (process.env.NODE_ENV === "development") {
       // Watch for main process file changes and restart
-      const chokidar = require("chokidar");
+      const chokidar = await import("chokidar");
       const watcher = chokidar.watch(
         [path.join(__dirname, "**/*.js"), path.join(__dirname, "**/*.js.map")],
         {
@@ -133,14 +144,12 @@ class BitcaveApp {
       }
     });
 
-    app.on("before-quit", () => {
+    app.on("before-quit", async () => {
       // Clean up resources before quitting
+      await this.projectManager.closeProject(true); // Save current project before quitting
       this.aiToolRegistry.dispose();
       this.webviewManager.dispose();
     });
-
-    // Setup development reset shortcut
-    this.setupResetShortcut();
   }
 
   private setupResetShortcut(): void {
@@ -352,6 +361,18 @@ class BitcaveApp {
     );
 
     ipcMain.handle(
+      "ai:abort",
+      async (event, { conversationId }: { conversationId: string }) => {
+        try {
+          this.aiService.abortConversation(conversationId);
+          return { success: true };
+        } catch (error) {
+          return { success: false, error: (error as Error).message };
+        }
+      }
+    );
+
+    ipcMain.handle(
       "ai:get-conversation",
       async (event, conversationId: string) => {
         try {
@@ -375,6 +396,107 @@ class BitcaveApp {
         }
       }
     );
+
+    ipcMain.handle(
+      "ai:new-conversation", 
+      async () => {
+        try {
+          const newConversationId = this.aiService.createNewConversation();
+          return { success: true, data: newConversationId };
+        } catch (error) {
+          return { success: false, error: (error as Error).message };
+        }
+      }
+    );
+
+    // Project management handlers
+    ipcMain.handle("projects:list", async () => {
+      try {
+        const projects = await this.projectManager.listProjects();
+        return { success: true, data: projects };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    });
+
+    ipcMain.handle("projects:recent", async () => {
+      try {
+        const projects = await this.projectManager.getRecentProjects();
+        return { success: true, data: projects };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    });
+
+    ipcMain.handle("projects:current", async () => {
+      try {
+        const project = this.projectManager.getCurrentProject();
+        return { success: true, data: project };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    });
+
+    ipcMain.handle("projects:create", async (event, request) => {
+      try {
+        const project = await this.projectManager.createProject(request);
+        return { success: true, data: project };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    });
+
+    ipcMain.handle("projects:open", async (event, data: { projectId: string }) => {
+      try {
+        await this.projectManager.openProject(data.projectId);
+        
+        // Initialize artifact manager for the opened project
+        const project = this.projectManager.getCurrentProject();
+        if (project) {
+          const projectPath = this.projectManager.getProjectPath();
+          if (projectPath) {
+            this.artifactManager = new ArtifactManager(projectPath);
+            await this.artifactManager.loadExistingArtifacts();
+            
+            // Set artifact manager in AI tools registry
+            this.aiToolRegistry.setArtifactManager(this.artifactManager);
+            
+            console.log('[Main] Artifact manager initialized for project:', project.name);
+          }
+        }
+        
+        return { success: true };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    });
+
+    ipcMain.handle("projects:close", async (event, data: { save?: boolean } = {}) => {
+      try {
+        await this.projectManager.closeProject(data.save ?? true);
+        return { success: true };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    });
+
+    ipcMain.handle("projects:save", async () => {
+      try {
+        await this.projectManager.saveWorkspace();
+        return { success: true };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    });
+
+    ipcMain.handle("projects:delete", async (event, data: { projectId: string }) => {
+      try {
+        await this.projectManager.deleteProject(data.projectId);
+        return { success: true };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    });
 
     // Code execution handler
     ipcMain.handle(
@@ -501,6 +623,92 @@ class BitcaveApp {
       async (event, data: IPCEventData<"webview:update-canvas-offset">) => {
         try {
           this.webviewManager.updateCanvasOffset(data.offsetX, data.offsetY);
+          return { success: true };
+        } catch (error) {
+          return { success: false, error: (error as Error).message };
+        }
+      }
+    );
+
+    // Artifact management handlers
+    ipcMain.handle(
+      "artifact:create",
+      async (event, data: IPCEventData<"artifact:create">) => {
+        try {
+          if (!this.artifactManager) {
+            throw new Error("Artifact manager not initialized - no project open");
+          }
+          const artifact = await this.artifactManager.createArtifact(data);
+          return { success: true, data: artifact };
+        } catch (error) {
+          return { success: false, error: (error as Error).message };
+        }
+      }
+    );
+
+    ipcMain.handle(
+      "artifact:update",
+      async (event, data: IPCEventData<"artifact:update">) => {
+        try {
+          if (!this.artifactManager) {
+            throw new Error("Artifact manager not initialized - no project open");
+          }
+          const artifact = await this.artifactManager.updateArtifact(
+            data.artifactId,
+            data.updates
+          );
+          return { success: true, data: artifact };
+        } catch (error) {
+          return { success: false, error: (error as Error).message };
+        }
+      }
+    );
+
+    ipcMain.handle(
+      "artifact:get-data",
+      async (event, data: IPCEventData<"artifact:get-data">) => {
+        try {
+          if (!this.artifactManager) {
+            throw new Error("Artifact manager not initialized - no project open");
+          }
+          const artifactData = await this.artifactManager.getArtifactData(
+            data.artifactId,
+            data.templateKey
+          );
+          return { success: true, data: artifactData };
+        } catch (error) {
+          return { success: false, error: (error as Error).message };
+        }
+      }
+    );
+
+    ipcMain.handle(
+      "artifact:set-data",
+      async (event, data: IPCEventData<"artifact:set-data">) => {
+        try {
+          if (!this.artifactManager) {
+            throw new Error("Artifact manager not initialized - no project open");
+          }
+          await this.artifactManager.setArtifactData(
+            data.artifactId,
+            data.templateKey,
+            data.data
+          );
+          return { success: true };
+        } catch (error) {
+          return { success: false, error: (error as Error).message };
+        }
+      }
+    );
+
+    ipcMain.handle(
+      "artifact:destroy",
+      async (event, data: IPCEventData<"artifact:destroy">) => {
+        try {
+          if (!this.artifactManager) {
+            throw new Error("Artifact manager not initialized - no project open");
+          }
+          await this.artifactManager.destroyArtifact(data.artifactId);
           return { success: true };
         } catch (error) {
           return { success: false, error: (error as Error).message };

@@ -65,8 +65,9 @@ export interface OpenRouterResponse {
 export class OpenRouterClient {
   private apiKey: string;
   private baseUrl = "https://openrouter.ai/api/v1";
-  private defaultModel = "z-ai/glm-4.5-air:free";
+  // private defaultModel = "z-ai/glm-4.5-air:free";
   // private defaultModel = "x-ai/grok-code-fast-1";
+  private defaultModel = "anthropic/claude-sonnet-4";
   private logger?: AILogger;
 
   constructor(apiKey: string) {

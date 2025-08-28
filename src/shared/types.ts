@@ -76,6 +76,37 @@ export interface CodeExecutionResult {
 }
 
 // Artifact system types
+export interface DataTemplate {
+  id: string;
+  artifactId: string;
+  name: string;
+  description: string;
+  schema: any; // JSONSchema
+  defaultValue: any;
+  access: 'read' | 'write' | 'readwrite';
+}
+
+export interface Artifact {
+  id: string;
+  title: string;
+  description: string;
+  html: string;
+  css?: string;
+  javascript?: string;
+  dataTemplates?: DataTemplate[];
+  dependencies?: string[];
+}
+
+export interface ArtifactCreationRequest {
+  title: string;
+  description: string;
+  html: string;
+  css?: string;
+  javascript?: string;
+  dataTemplates?: DataTemplate[];
+  dependencies?: string[];
+}
+
 export interface ArtifactConfig {
   type:
     | "react-component"
@@ -206,8 +237,27 @@ export interface IPCEvents {
   "ai:set-api-key": { apiKey: string };
   "ai:is-configured": Record<string, never>;
   "ai:chat": { conversationId: string; message: string };
+  "ai:abort": { conversationId: string };
   "ai:get-conversation": { conversationId: string };
   "ai:clear-conversation": { conversationId: string };
+  "ai:new-conversation": Record<string, never>;
+
+  // Project management channels
+  "projects:list": Record<string, never>;
+  "projects:recent": Record<string, never>;
+  "projects:current": Record<string, never>;
+  "projects:create": { name: string; description?: string; template?: string };
+  "projects:open": { projectId: string };
+  "projects:close": { save?: boolean };
+  "projects:save": Record<string, never>;
+  "projects:delete": { projectId: string };
+
+  // Artifact management channels
+  "artifact:create": ArtifactCreationRequest;
+  "artifact:update": { artifactId: string; updates: Partial<Artifact> };
+  "artifact:get-data": { artifactId: string; templateKey?: string };
+  "artifact:set-data": { artifactId: string; templateKey: string; data: any };
+  "artifact:destroy": { artifactId: string };
 }
 
 export type IPCEventName = keyof IPCEvents;

@@ -22,6 +22,7 @@ export class AIService {
   private windowManager: WindowManager;
   private conversations: Map<string, AIConversation> = new Map();
   private logger: AILogger;
+  private abortControllers: Map<string, AbortController> = new Map();
 
   constructor(toolRegistry: AIToolRegistry, windowManager: WindowManager) {
     this.toolRegistry = toolRegistry;
@@ -71,7 +72,15 @@ export class AIService {
         content: userMessage,
       });
 
-      return await this.processConversationLoop(conversationId, conversation);
+      // Create abort controller for this conversation
+      const controller = new AbortController();
+      this.abortControllers.set(conversationId, controller);
+      
+      try {
+        return await this.processConversationLoop(conversationId, conversation, controller.signal);
+      } finally {
+        this.abortControllers.delete(conversationId);
+      }
     } catch (error) {
       console.error("AI Service error:", error);
       this.logger.logError(conversationId, error, { userMessage });
@@ -79,8 +88,12 @@ export class AIService {
     }
   }
 
-  private async processConversationLoop(conversationId: string, conversation: AIConversation): Promise<string> {
+  private async processConversationLoop(conversationId: string, conversation: AIConversation, abortSignal: AbortSignal): Promise<string> {
     while (true) {
+      // Check if aborted
+      if (abortSignal.aborted) {
+        throw new Error("Request aborted");
+      }
       // Create context message
       const contextMessage: OpenRouterMessage = {
         role: "system",
@@ -183,7 +196,8 @@ export class AIService {
         try {
           parsedArgs = JSON.parse(argsString);
         } catch (parseError) {
-          console.warn(`[AIService] JSON parse failed, using regex fallback`);
+          console.warn(`[AIService] JSON parse failed:`, parseError);
+          console.warn(`[AIService] Args string that failed:`, argsString.substring(0, 200) + "...");
           parsedArgs = this.extractArgsWithRegex(argsString, conversationId, toolCall.function.name);
         }
 
@@ -357,7 +371,9 @@ export class AIService {
     }
     
     context += "\nAvailable Actions:\n";
-    context += "- Create windows (webview, text, code, markdown, graph, chat)\n";
+    context += "- Create windows (webview, text, code, markdown, graph, chat, artifact)\n";
+    context += "- Create interactive artifacts (web apps) using createArtifactWindow\n";
+    context += "- Build tools, games, calculators, demos with HTML/CSS/JavaScript\n";
     context += "- Modify window content, position, size\n";
     context += "- Execute code in sandboxed environments\n";
     context += "- Search and manipulate window data\n";
@@ -376,5 +392,20 @@ export class AIService {
 
   clearAllConversations(): void {
     this.conversations.clear();
+  }
+
+  createNewConversation(): string {
+    const newConversationId = `chat_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    console.log(`[AIService] Created new conversation: ${newConversationId}`);
+    return newConversationId;
+  }
+
+  abortConversation(conversationId: string): void {
+    const controller = this.abortControllers.get(conversationId);
+    if (controller) {
+      console.log(`[AIService] Aborting conversation: ${conversationId}`);
+      controller.abort();
+      this.abortControllers.delete(conversationId);
+    }
   }
 }

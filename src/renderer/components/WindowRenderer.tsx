@@ -4,9 +4,10 @@ import type {
   CodeExecutionRequest,
   CodeExecutionResult,
 } from "@/shared/types";
-import { WINDOW_CONFIGS } from "@/shared/constants";
+import { WINDOW_CONFIGS, APP_CONFIG } from "@/shared/constants";
 import CodeExecutionWindow from "../windows/CodeExecutionWindow";
 import { WebviewWindow } from "../windows/WebviewWindow";
+import { ArtifactWindow } from "../windows/ArtifactWindow";
 
 interface WindowRendererProps {
   window: BaseWindow;
@@ -19,7 +20,13 @@ interface WindowRendererProps {
   onExecuteCode?: (
     request: CodeExecutionRequest
   ) => Promise<CodeExecutionResult>;
+  snapToGrid?: boolean;
 }
+
+// Grid snapping utility function
+const snapToGrid = (value: number, gridSize: number): number => {
+  return Math.round(value / gridSize) * gridSize;
+};
 
 export const WindowRenderer: React.FC<WindowRendererProps> = ({
   window,
@@ -30,6 +37,7 @@ export const WindowRenderer: React.FC<WindowRendererProps> = ({
   onResize,
   onUpdate,
   onExecuteCode,
+  snapToGrid: snapToGridEnabled = APP_CONFIG.grid.snapEnabled,
 }) => {
   const windowRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -134,10 +142,16 @@ export const WindowRenderer: React.FC<WindowRendererProps> = ({
       if (isDragging) {
         const deltaX = event.clientX - dragStart.x;
         const deltaY = event.clientY - dragStart.y;
-        onMove({
-          x: dragStart.windowX + deltaX,
-          y: dragStart.windowY + deltaY,
-        });
+        let newX = dragStart.windowX + deltaX;
+        let newY = dragStart.windowY + deltaY;
+        
+        // Apply grid snapping if enabled
+        if (snapToGridEnabled) {
+          newX = snapToGrid(newX, APP_CONFIG.grid.size);
+          newY = snapToGrid(newY, APP_CONFIG.grid.size);
+        }
+        
+        onMove({ x: newX, y: newY });
       } else if (isResizing) {
         const deltaX = event.clientX - resizeStart.x;
         const deltaY = event.clientY - resizeStart.y;
@@ -168,6 +182,15 @@ export const WindowRenderer: React.FC<WindowRendererProps> = ({
             windowConfig.minSize.height,
             resizeStart.height - deltaY
           );
+        }
+
+        // Apply grid snapping to resize if enabled
+        if (snapToGridEnabled) {
+          newWidth = snapToGrid(newWidth, APP_CONFIG.grid.size);
+          newHeight = snapToGrid(newHeight, APP_CONFIG.grid.size);
+          // Ensure minimum size after snapping
+          newWidth = Math.max(windowConfig.minSize.width, newWidth);
+          newHeight = Math.max(windowConfig.minSize.height, newHeight);
         }
 
         onResize({ width: newWidth, height: newHeight });
@@ -524,6 +547,29 @@ const WindowContent: React.FC<{
           onExecuteCode={onExecuteCode}
         />
       );
+    case "artifact":
+      // For artifact windows, the artifact data should be in window.metadata.artifact
+      if (window.metadata?.artifact) {
+        return (
+          <ArtifactWindow
+            artifact={window.metadata.artifact}
+            onDataChange={(templateKey, data) => {
+              // Notify about data changes for potential AI tool interactions
+              console.log(`Artifact ${window.metadata.artifact.id} data changed:`, templateKey, data);
+            }}
+            onNotify={(message) => {
+              // Send toast notification to user
+              (window as any).electronAPI.invoke("ui:toast", message);
+            }}
+          />
+        );
+      } else {
+        return (
+          <div style={{ padding: "16px", color: "#6b7280", textAlign: "center" }}>
+            No artifact data found. Use AI tools to create an artifact for this window.
+          </div>
+        );
+      }
 
     case "text":
       return (

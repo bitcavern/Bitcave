@@ -1,3 +1,4 @@
+import type { ArtifactManager } from "../artifacts/artifact-manager";
 import type {
   AIToolResponse,
   WindowType,
@@ -21,6 +22,7 @@ export class AIToolRegistry {
   private tools: Map<string, AITool> = new Map();
   private windowManager: WindowManager;
   private codeExecutionSandbox: CodeExecutionSandbox;
+  private artifactManager: ArtifactManager | null = null;
   private mainWindow: BrowserWindow | null = null;
   private multiStepPlans: Map<
     string,
@@ -36,6 +38,10 @@ export class AIToolRegistry {
     this.windowManager = windowManager;
     this.codeExecutionSandbox = new CodeExecutionSandbox();
     this.registerDefaultTools();
+  }
+
+  public setArtifactManager(artifactManager: ArtifactManager): void {
+    this.artifactManager = artifactManager;
   }
 
   public setMainWindow(mainWindow: BrowserWindow): void {
@@ -113,6 +119,345 @@ export class AIToolRegistry {
   }
 
   private registerDefaultTools(): void {
+    this.registerTool({
+      name: "createArtifact",
+      description:
+        "Create a new interactive artifact (web application/component). Use this for creating interactive tools like calculators, games, demos, data visualizations, MIDI controllers, todo apps, etc. This creates complete web applications with HTML, CSS, and JavaScript that run in a sandboxed environment.",
+      parameters: {
+        title: {
+          type: "string",
+          required: true,
+          description:
+            "Descriptive title for the artifact (e.g. 'MIDI Controller', 'Todo App', 'Calculator')",
+        },
+        description: {
+          type: "string",
+          required: true,
+          description: "What this artifact does and its key features",
+        },
+        html: {
+          type: "string",
+          required: true,
+          description:
+            "Complete HTML structure with semantic elements, forms, buttons, etc. Include all necessary DOM elements for interactivity.",
+        },
+        css: {
+          type: "string",
+          required: false,
+          description:
+            "CSS styles for layout, appearance, animations, and responsive design. Use modern CSS features.",
+        },
+        javascript: {
+          type: "string",
+          required: false,
+          description:
+            "JavaScript code for interactivity, event handlers, data manipulation, and dynamic behavior. Can use modern ES6+ features.",
+        },
+        dataTemplates: {
+          type: "array",
+          required: false,
+          description:
+            "Array of data template objects for persistent data storage (e.g. user settings, saved data, recorded tracks)",
+        },
+        dependencies: {
+          type: "array",
+          required: false,
+          description:
+            "External JavaScript library URLs (e.g. ['https://cdn.jsdelivr.net/npm/chart.js', 'https://unpkg.com/react@18/umd/react.production.min.js'])",
+        },
+      },
+      execute: async (params) => {
+        if (!this.artifactManager) {
+          throw new Error(
+            "Artifact manager not available. Please open a project first."
+          );
+        }
+
+        // Sanitize parameters - remove undefined/null values
+        const cleanedParams = {
+          title: params.title,
+          description: params.description,
+          html: params.html,
+          ...(params.css && params.css.trim() && { css: params.css }),
+          ...(params.javascript &&
+            params.javascript.trim() && { javascript: params.javascript }),
+          ...(params.dataTemplates &&
+            Array.isArray(params.dataTemplates) && {
+              dataTemplates: params.dataTemplates,
+            }),
+          ...(params.dependencies &&
+            Array.isArray(params.dependencies) && {
+              dependencies: params.dependencies,
+            }),
+        };
+
+        return await this.artifactManager.createArtifact(cleanedParams);
+      },
+    });
+
+    this.registerTool({
+      name: "updateArtifact",
+      description:
+        "Update an existing artifact's code or templates. Use this to modify, enhance, or fix existing artifacts based on user feedback or new requirements.",
+      parameters: {
+        artifactId: {
+          type: "string",
+          required: true,
+          description:
+            "The unique ID of the artifact to update (returned from createArtifact or createArtifactWindow)",
+        },
+        html: {
+          type: "string",
+          required: false,
+          description:
+            "Updated HTML structure - only provide if changing the HTML",
+        },
+        css: {
+          type: "string",
+          required: false,
+          description:
+            "Updated CSS styles - only provide if changing the styling",
+        },
+        javascript: {
+          type: "string",
+          required: false,
+          description:
+            "Updated JavaScript code - only provide if changing the functionality",
+        },
+        dataTemplates: {
+          type: "array",
+          required: false,
+          description:
+            "Updated data templates - only provide if changing data structure",
+        },
+        dependencies: {
+          type: "array",
+          required: false,
+          description: "Updated external library dependencies",
+        },
+      },
+      execute: async (params) => {
+        if (!this.artifactManager) {
+          throw new Error(
+            "Artifact manager not available. Please open a project first."
+          );
+        }
+        const { artifactId, ...updates } = params;
+        return await this.artifactManager.updateArtifact(artifactId, updates);
+      },
+    });
+
+    this.registerTool({
+      name: "getArtifactData",
+      description:
+        "Retrieve stored data from an artifact's data templates. Use this to read user data, settings, or saved content from an artifact.",
+      parameters: {
+        artifactId: {
+          type: "string",
+          required: true,
+          description: "The unique ID of the artifact to read data from",
+        },
+        templateKey: {
+          type: "string",
+          required: false,
+          description:
+            "Specific data template key to retrieve (e.g. 'settings', 'todos', 'recordings'). Omit to get all data.",
+        },
+      },
+      execute: async (params) => {
+        if (!this.artifactManager) {
+          throw new Error(
+            "Artifact manager not available. Please open a project first."
+          );
+        }
+        return await this.artifactManager.getArtifactData(
+          params.artifactId,
+          params.templateKey
+        );
+      },
+    });
+
+    this.registerTool({
+      name: "setArtifactData",
+      description:
+        "Store data in an artifact's data template. Use this to save user data, settings, or content from an artifact.",
+      parameters: {
+        artifactId: {
+          type: "string",
+          required: true,
+          description: "The unique ID of the artifact to store data for",
+        },
+        templateKey: {
+          type: "string",
+          required: true,
+          description:
+            "Data template key to store data under (e.g. 'settings', 'todos', 'recordings')",
+        },
+        data: {
+          type: "any",
+          required: true,
+          description:
+            "The data to store - can be objects, arrays, strings, numbers, etc.",
+        },
+      },
+      execute: async (params) => {
+        if (!this.artifactManager) {
+          throw new Error(
+            "Artifact manager not available. Please open a project first."
+          );
+        }
+        await this.artifactManager.setArtifactData(
+          params.artifactId,
+          params.templateKey,
+          params.data
+        );
+        return { success: true };
+      },
+    });
+
+    this.registerTool({
+      name: "destroyArtifact",
+      description: "Destroy an artifact and all its data",
+      parameters: {
+        artifactId: {
+          type: "string",
+          required: true,
+          description: "ID of the artifact to destroy",
+        },
+      },
+      execute: async (params) => {
+        if (!this.artifactManager) {
+          throw new Error(
+            "Artifact manager not available. Please open a project first."
+          );
+        }
+        await this.artifactManager.destroyArtifact(params.artifactId);
+        return { success: true };
+      },
+    });
+
+    this.registerTool({
+      name: "createArtifactWindow",
+      description:
+        "**PRIMARY TOOL** Create and display an interactive web application in a window. Use this when users ask for: calculators, games, tools, widgets, MIDI controllers, todo apps, timers, charts, demos, or any interactive functionality. This creates a complete HTML/CSS/JS application and immediately shows it to the user in a dedicated window. ALWAYS use this instead of createArtifact when the user wants to see/use the artifact.",
+      parameters: {
+        title: {
+          type: "string",
+          required: true,
+          description:
+            "Clear, descriptive title (e.g. 'MIDI Piano Controller', 'Pomodoro Timer', 'Scientific Calculator')",
+        },
+        description: {
+          type: "string",
+          required: true,
+          description:
+            "Detailed explanation of what this artifact does and its key features",
+        },
+        html: {
+          type: "string",
+          required: true,
+          description:
+            "Complete HTML structure with all UI elements, buttons, forms, displays, etc. Use semantic HTML5 elements.",
+        },
+        css: {
+          type: "string",
+          required: false,
+          description:
+            "Modern CSS for styling, layout, animations, hover effects, and responsive design. Make it look polished and professional.",
+        },
+        javascript: {
+          type: "string",
+          required: false,
+          description:
+            "JavaScript for all interactivity, event handling, calculations, animations, and dynamic behavior. Use modern ES6+ syntax.",
+        },
+        dataTemplates: {
+          type: "array",
+          required: false,
+          description:
+            "Data templates for persistent storage (e.g. [{id: 'settings', name: 'User Settings', defaultValue: {theme: 'dark'}, access: 'readwrite'}])",
+        },
+        dependencies: {
+          type: "array",
+          required: false,
+          description:
+            "CDN URLs for external libraries if needed (e.g. Chart.js, D3, Tone.js)",
+        },
+        windowPosition: {
+          type: "object",
+          required: false,
+          description:
+            "Window position as {x: number, y: number}, defaults to {x: 100, y: 100}",
+        },
+      },
+      execute: async (params) => {
+        if (!this.artifactManager) {
+          throw new Error(
+            "Artifact manager not available. Please open a project first."
+          );
+        }
+
+        // Create the artifact first
+        const { windowPosition, ...artifactParams } = params;
+
+        console.log(
+          "[AIToolRegistry] createArtifactWindow raw params:",
+          JSON.stringify(artifactParams, null, 2)
+        );
+
+        // Sanitize parameters - remove undefined/null values
+        const cleanedParams = {
+          title: artifactParams.title,
+          description: artifactParams.description,
+          html: artifactParams.html,
+          ...(artifactParams.css &&
+            artifactParams.css.trim() && { css: artifactParams.css }),
+          ...(artifactParams.javascript &&
+            artifactParams.javascript.trim() && {
+              javascript: artifactParams.javascript,
+            }),
+          ...(artifactParams.dataTemplates &&
+            Array.isArray(artifactParams.dataTemplates) && {
+              dataTemplates: artifactParams.dataTemplates,
+            }),
+          ...(artifactParams.dependencies &&
+            Array.isArray(artifactParams.dependencies) && {
+              dependencies: artifactParams.dependencies,
+            }),
+        };
+
+        const artifact = await this.artifactManager.createArtifact(
+          cleanedParams
+        );
+
+        // Create a window to display the artifact
+        const windowConfig = {
+          type: "artifact" as WindowType,
+          title: `Artifact: ${artifact.title}`,
+          position: windowPosition || { x: 100, y: 100 },
+          size: { width: 600, height: 400 },
+          metadata: {
+            artifact: artifact,
+            label: artifact.title,
+          },
+        };
+
+        const window = await this.windowManager.createWindow(
+          "artifact",
+          windowConfig
+        );
+
+        // Notify the renderer about the new window
+        this.triggerWindowCreated(window);
+
+        return {
+          artifact,
+          window,
+          message: `Created artifact "${artifact.title}" and opened it in a window`,
+        };
+      },
+    });
+
     // Window Management Tools
     this.registerTool({
       name: "createWindow",
@@ -862,7 +1207,7 @@ export class AIToolRegistry {
           });
 
           // Get the updated window
-          window = await this.windowManager.getWindow(window.id);
+          window = this.windowManager.getWindow(window.id);
 
           // Trigger window updated event so frontend refreshes
           this.triggerWindowUpdated(window);
@@ -946,7 +1291,7 @@ export class AIToolRegistry {
 
         try {
           // Get the HTML content directly from the BrowserView
-          const { bitcaveApp } = require("../main");
+          const { bitcaveApp } = await import("../main");
           const webviewManager = bitcaveApp?.getWebviewManager();
           if (!webviewManager) {
             throw new Error("Webview manager not available");
@@ -1079,7 +1424,7 @@ export class AIToolRegistry {
 
         // Load the URL in the webview manager
         try {
-          const { bitcaveApp } = require("../main");
+          const { bitcaveApp } = await import("../main");
           const webviewManager = bitcaveApp?.getWebviewManager();
           if (webviewManager) {
             // Create the webview if it doesn't exist
@@ -1119,7 +1464,7 @@ export class AIToolRegistry {
       execute: async (params) => {
         const planId = `plan_${Date.now()}_${Math.random()
           .toString(36)
-          .substr(2, 9)}`;
+          .substring(2, 11)}`;
 
         // Store the plan
         this.multiStepPlans.set(planId, {
@@ -1403,6 +1748,7 @@ export class AIToolRegistry {
       JSON.stringify(sanitized);
       return sanitized;
     } catch (e) {
+      console.error(`[AIToolRegistry] Failed to sanitize ${field}:`, e);
       issues.push(`${field} not JSON-serializable; replaced with {}`);
       return {};
     }

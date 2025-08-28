@@ -17,8 +17,6 @@
     "package": "npm run build && electron-builder",
     "package:mac": "npm run build && electron-builder --mac",
     "start": "electron .",
-    "lint": "eslint src --ext .ts,.tsx",
-    "lint:fix": "eslint src --ext .ts,.tsx --fix",
     "type-check": "tsc --noEmit"
   },
   "keywords": [
@@ -37,6 +35,7 @@
     "cheerio": "^1.1.2",
     "dotenv": "^17.2.1",
     "electron": "^37.3.1",
+    "global": "^4.4.0",
     "node-pty": "^1.0.0",
     "path-browserify": "1.0.1",
     "react": "^19.1.1",

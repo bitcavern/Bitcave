@@ -8,6 +8,7 @@ interface WebviewInstance {
   bounds: { x: number; y: number; width: number; height: number };
   browserView: BrowserView | null;
   isActive: boolean;
+  window?: BaseWindow;
 }
 
 export class WebviewManager {
@@ -110,25 +111,16 @@ export class WebviewManager {
 
   public updateCanvasOffset(offsetX: number, offsetY: number): void {
     // Update all BrowserView positions to account for canvas panning
-    for (const [windowId, webview] of this.webviews) {
-      if (webview.browserView && this.mainWindow) {
-        try {
-          const titleBarHeight = 40;
-          const navigationBarHeight = 60;
-
-          const adjustedBounds = {
-            x: webview.bounds.x + offsetX,
-            y:
-              webview.bounds.y + offsetY + titleBarHeight + navigationBarHeight,
-            width: webview.bounds.width,
-            height:
-              webview.bounds.height - titleBarHeight - navigationBarHeight,
-          };
-
-          webview.browserView.setBounds(adjustedBounds);
-        } catch (error) {
-          console.error("Failed to update BrowserView canvas offset:", error);
-        }
+    for (const [, webview] of this.webviews) {
+      if (webview.browserView && this.mainWindow && webview.window) {
+        const bounds = webview.browserView.getBounds();
+        // Apply canvas offset to webview positioning
+        this.setBounds(webview.window.id, {
+          x: bounds.x - offsetX,
+          y: bounds.y - offsetY,
+          width: bounds.width,
+          height: bounds.height
+        });
       }
     }
   }
@@ -191,7 +183,7 @@ export class WebviewManager {
       if (webview.browserView && this.mainWindow) {
         try {
           this.mainWindow.removeBrowserView(webview.browserView);
-        } catch (error) {
+        } catch {
           // BrowserView might not be attached
         }
       }
@@ -225,7 +217,7 @@ export class WebviewManager {
       this.emitWebviewEvent(windowId, "did-stop-loading");
     });
 
-    browserView.webContents.on("did-navigate", (event, navigationUrl) => {
+    browserView.webContents.on("did-navigate", (_event, navigationUrl) => {
       // Update the webview instance URL
       const webview = this.webviews.get(windowId);
       if (webview) {
@@ -234,7 +226,7 @@ export class WebviewManager {
       this.emitWebviewEvent(windowId, "did-navigate", { url: navigationUrl });
     });
 
-    browserView.webContents.on("page-title-updated", (event, title) => {
+    browserView.webContents.on("page-title-updated", (_event, title) => {
       // Update the webview instance title
       const webview = this.webviews.get(windowId);
       if (webview) {
@@ -243,7 +235,7 @@ export class WebviewManager {
       this.emitWebviewEvent(windowId, "page-title-updated", { title });
     });
 
-    browserView.webContents.on("did-navigate-in-page", (event, url) => {
+    browserView.webContents.on("did-navigate-in-page", (_event, url) => {
       this.emitWebviewEvent(windowId, "did-navigate-in-page", {
         url,
         canGoBack: browserView.webContents.canGoBack(),

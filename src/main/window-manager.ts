@@ -243,6 +243,11 @@ export class WindowManager {
     };
   }
 
+  public clearAllWindows(): void {
+    this.windows.clear();
+    this.nextZIndex = 1;
+  }
+
   public getSystemMetrics() {
     return {
       totalWindows: this.windows.size,

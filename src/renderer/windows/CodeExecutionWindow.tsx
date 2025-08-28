@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { atomDark as syntaxTheme } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { BaseWindow, CodeExecutionRequest, CodeExecutionResult } from '@/shared/types';
 
 interface CodeExecutionWindowProps {
@@ -240,36 +242,75 @@ export const CodeExecutionWindow: React.FC<CodeExecutionWindowProps> = ({
               Ctrl+Enter to execute
             </span>
           </div>
-          <textarea
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-            placeholder={
-              language === 'python'
-                ? 'print("Hello from Python!")\n\n# Try some math:\nimport math\nprint(f"π = {math.pi:.4f}")\n\n# Data analysis:\nimport numpy as np\ndata = np.array([1, 2, 3, 4, 5])\nprint(f"Mean: {np.mean(data)}")'
-                : 'console.log("Hello from JavaScript!");\n\n// Try some math:\nconst result = Math.PI * 2;\nconsole.log(`2π = ${result.toFixed(4)}`);\n\n// Array operations:\nconst data = [1, 2, 3, 4, 5];\nconst sum = data.reduce((a, b) => a + b, 0);\nconsole.log(`Sum: ${sum}`);'
-            }
-            disabled={isExecuting}
-            onKeyDown={(e) => {
-              if (e.ctrlKey && e.key === 'Enter') {
-                handleExecuteCode();
-              }
-            }}
-            style={{
-              width: '100%',
-              minHeight: '200px',
-              maxHeight: '400px',
-              padding: '16px',
-              background: 'transparent',
-              color: '#f9fafb',
-              fontFamily: '"JetBrains Mono", "SF Mono", Consolas, monospace',
-              fontSize: '14px',
-              lineHeight: '1.5',
-              border: 'none',
-              outline: 'none',
+          <div style={{ position: 'relative', minHeight: '200px', maxHeight: '400px',
               resize: 'vertical',
-              opacity: isExecuting ? 0.6 : 1,
-            }}
-          />
+              overflow: 'hidden',}}>
+            <textarea
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              placeholder={
+                language === 'python'
+                  ? 'print("Hello from Python!")\n\n# Try some math:\nimport math\nprint(f"π = {math.pi:.4f}")\n\n# Data analysis:\nimport numpy as np\ndata = np.array([1, 2, 3, 4, 5])\nprint(f"Mean: {np.mean(data)}")'
+                  : 'console.log("Hello from JavaScript!");\n\n// Try some math:\nconst result = Math.PI * 2;\nconsole.log(`2π = ${result.toFixed(4)}`);\n\n// Array operations:\nconst data = [1, 2, 3, 4, 5];\nconst sum = data.reduce((a, b) => a + b, 0);\nconsole.log(`Sum: ${sum}`);'
+              }
+              disabled={isExecuting}
+              onKeyDown={(e) => {
+                if (e.ctrlKey && e.key === 'Enter') {
+                  handleExecuteCode();
+                }
+              }}
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: '100%',
+                padding: '16px',
+                background: 'transparent',
+                color: 'transparent',
+                fontFamily: '"JetBrains Mono", "SF Mono", Consolas, monospace',
+                fontSize: '14px',
+                lineHeight: '1.5',
+                border: 'none',
+                outline: 'none',
+                resize: 'none',
+                opacity: isExecuting ? 0.6 : 1,
+                caretColor: 'white',
+                zIndex: 1,
+              }}
+              spellCheck="false"
+            />
+            <SyntaxHighlighter
+              language={language}
+              style={syntaxTheme}
+              showLineNumbers
+              wrapLines
+              customStyle={{
+                width: '100%',
+                minHeight: '200px',
+                maxHeight: '400px',
+                padding: '16px',
+                background: 'transparent',
+                fontFamily: '"JetBrains Mono", "SF Mono", Consolas, monospace',
+                fontSize: '14px',
+                lineHeight: '1.5',
+                border: 'none',
+                outline: 'none',
+                margin: 0,
+                resize: 'vertical',
+                opacity: isExecuting ? 0.6 : 1,
+              }}
+              codeTagProps={{
+                style: {
+                  fontFamily: 'inherit',
+                  fontSize: 'inherit',
+                  lineHeight: 'inherit',
+                },
+              }}
+            >
+              {code}
+            </SyntaxHighlighter>
+          </div>
         </div>
 
         {/* Output Card */}
@@ -283,33 +324,7 @@ export const CodeExecutionWindow: React.FC<CodeExecutionWindowProps> = ({
           flex: 1,
           minHeight: '200px',
         }}>
-          <div style={{
-            padding: '12px 16px',
-            background: 'rgba(55, 65, 81, 0.5)',
-            borderBottom: '1px solid #374151',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-          }}>
-            <span style={{ fontSize: '14px', fontWeight: '600', color: '#e5e7eb' }}>
-              Output
-            </span>
-            {currentResult && (
-              <span style={{
-                fontSize: '12px',
-                padding: '4px 8px',
-                borderRadius: '6px',
-                background: currentResult.success ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)',
-                color: currentResult.success ? '#34d399' : '#f87171',
-                border: `1px solid ${currentResult.success ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
-                fontWeight: '500',
-              }}>
-                {currentResult.success ? '✅ Success' : '❌ Error'} 
-                {currentResult.executionTime > 0 && ` (${currentResult.executionTime}ms)`}
-              </span>
-            )}
-          </div>
-          
+
           <div style={{ padding: '16px', height: 'calc(100% - 57px)', overflowY: 'auto' }}>
             {isExecuting && (
               <div style={{
@@ -466,7 +481,7 @@ export const CodeExecutionWindow: React.FC<CodeExecutionWindowProps> = ({
                       {entry.request.language} • {entry.result.success ? 'Success' : 'Error'}
                     </span>
                     <span style={{ color: '#9ca3af', fontSize: '11px' }}>
-                      {entry.timestamp.toLocaleTimeString()}
+                      {new Date(entry.timestamp).toLocaleTimeString()}
                     </span>
                   </div>
                   <div style={{ color: '#d1d5db', fontSize: '11px', fontFamily: 'monospace' }}>
