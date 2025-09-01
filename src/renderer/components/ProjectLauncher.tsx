@@ -25,6 +25,7 @@ export const ProjectLauncher: React.FC<ProjectLauncherProps> = ({
     name: "",
     description: "",
     template: "",
+    folderPath: "",
   });
 
   useEffect(() => {
@@ -53,16 +54,28 @@ export const ProjectLauncher: React.FC<ProjectLauncherProps> = ({
     }
   };
 
+  const handleSelectFolder = async () => {
+    try {
+      const result = await (window as any).electronAPI.invoke('dialog:select-folder');
+      if (result && !result.canceled && result.filePaths.length > 0) {
+        setCreateForm(prev => ({ ...prev, folderPath: result.filePaths[0] }));
+      }
+    } catch (error) {
+      console.error('Failed to select folder:', error);
+    }
+  };
+
   const handleCreateProject = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!createForm.name.trim()) return;
 
     try {
-      const result = await window.electronAPI.invoke("projects:create", {
+      const result = await (window as any).electronAPI.invoke("projects:create", {
         name: createForm.name.trim(),
         description: createForm.description.trim() || undefined,
         template: createForm.template || undefined,
+        folderPath: createForm.folderPath || undefined,
       });
 
       if (result.success) {
@@ -287,6 +300,60 @@ export const ProjectLauncher: React.FC<ProjectLauncherProps> = ({
                   boxSizing: "border-box" as const
                 }}
               />
+            </div>
+
+            <div style={{ marginBottom: "1.5rem" }}>
+              <label style={{
+                display: "block",
+                marginBottom: "0.5rem",
+                fontWeight: "500",
+                color: "#e2e8f0"
+              }}>
+                Project Folder (optional)
+              </label>
+              <div style={{ display: "flex", gap: "0.75rem" }}>
+                <input
+                  type="text"
+                  value={createForm.folderPath}
+                  readOnly
+                  placeholder="Choose a folder to store your project (default location will be used if not specified)"
+                  style={{
+                    flex: 1,
+                    background: "rgba(255, 255, 255, 0.05)",
+                    border: "1px solid rgba(255, 255, 255, 0.2)",
+                    borderRadius: "0.5rem",
+                    padding: "0.75rem",
+                    color: "#94a3b8",
+                    fontSize: "1rem",
+                    boxSizing: "border-box" as const
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={handleSelectFolder}
+                  style={{
+                    background: "rgba(255, 255, 255, 0.1)",
+                    border: "1px solid rgba(255, 255, 255, 0.2)",
+                    borderRadius: "0.5rem",
+                    padding: "0.75rem 1.25rem",
+                    color: "#f1f5f9",
+                    fontSize: "1rem",
+                    fontWeight: "500",
+                    cursor: "pointer",
+                    whiteSpace: "nowrap" as const
+                  }}
+                >
+                  Browse
+                </button>
+              </div>
+              <p style={{
+                margin: "0.5rem 0 0 0",
+                fontSize: "0.875rem",
+                color: "#64748b",
+                lineHeight: "1.4"
+              }}>
+                If not specified, the project will be stored in the default Bitcave folder
+              </p>
             </div>
 
             <div style={{

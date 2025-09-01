@@ -10,6 +10,7 @@ export interface Project {
   template?: string;
   settings: ProjectSettings;
   metadata: ProjectMetadata;
+  folderPath?: string; // Custom folder path for this project
 }
 
 export interface ProjectInfo {
@@ -127,6 +128,7 @@ export interface CreateProjectRequest {
   description?: string;
   template?: string;
   settings?: Partial<ProjectSettings>;
+  folderPath?: string; // User-specified folder path for project storage
 }
 
 export interface ExportOptions {

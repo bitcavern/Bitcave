@@ -7,9 +7,13 @@ import type { Artifact, ArtifactCreationRequest, DataTemplate } from '@/shared/t
 export class ArtifactManager {
   private artifacts: Map<string, Artifact> = new Map();
   private projectPath: string;
+  private globalArtifactsPath: string;
 
-  constructor(projectPath: string) {
+  constructor(projectPath: string, globalBasePath?: string) {
     this.projectPath = projectPath;
+    this.globalArtifactsPath = globalBasePath 
+      ? path.join(globalBasePath, 'global-artifacts')
+      : path.join(require('os').homedir(), '.bitcave', 'global-artifacts');
   }
 
   async createArtifact(request: ArtifactCreationRequest): Promise<Artifact> {
@@ -184,5 +188,112 @@ export class ArtifactManager {
 
   getAllArtifacts(): Artifact[] {
     return Array.from(this.artifacts.values());
+  }
+
+  // Global artifact methods for cross-project sharing
+  async saveArtifactGlobally(artifactId: string, name?: string): Promise<void> {
+    const artifact = this.artifacts.get(artifactId);
+    if (!artifact) {
+      throw new Error(`Artifact ${artifactId} not found`);
+    }
+
+    // Ensure global artifacts directory exists
+    await fs.mkdir(this.globalArtifactsPath, { recursive: true });
+
+    const globalArtifactId = uuidv4();
+    const globalArtifact = {
+      ...artifact,
+      id: globalArtifactId,
+      title: name || artifact.title,
+      createdAt: new Date(),
+      isGlobal: true,
+      originalProjectId: this.getProjectIdFromPath()
+    };
+
+    const globalArtifactPath = path.join(this.globalArtifactsPath, globalArtifactId);
+    await fs.mkdir(globalArtifactPath, { recursive: true });
+
+    // Copy artifact files
+    const sourcePath = path.join(globalArtifactPath, 'source');
+    await fs.mkdir(sourcePath, { recursive: true });
+
+    await fs.writeFile(path.join(sourcePath, 'index.html'), artifact.html);
+    if (artifact.css && artifact.css.trim()) {
+      await fs.writeFile(path.join(sourcePath, 'styles.css'), artifact.css);
+    }
+    if (artifact.javascript && artifact.javascript.trim()) {
+      await fs.writeFile(path.join(sourcePath, 'script.js'), artifact.javascript);
+    }
+
+    if (artifact.dataTemplates) {
+      const dataPath = path.join(globalArtifactPath, 'data');
+      await fs.mkdir(dataPath, { recursive: true });
+      await fs.writeFile(path.join(dataPath, 'templates.json'), JSON.stringify(artifact.dataTemplates, null, 2));
+    }
+
+    // Save global artifact metadata
+    const globalMetadataPath = path.join(globalArtifactPath, 'artifact.json');
+    await fs.writeFile(globalMetadataPath, JSON.stringify(globalArtifact, null, 2));
+  }
+
+  async loadGlobalArtifacts(): Promise<Artifact[]> {
+    try {
+      const globalArtifacts: Artifact[] = [];
+      const artifactDirs = await fs.readdir(this.globalArtifactsPath);
+      
+      for (const dirName of artifactDirs) {
+        const artifactMetadataPath = path.join(this.globalArtifactsPath, dirName, 'artifact.json');
+        try {
+          const metadataContent = await fs.readFile(artifactMetadataPath, 'utf-8');
+          const artifact = JSON.parse(metadataContent) as Artifact;
+          globalArtifacts.push(artifact);
+        } catch (error) {
+          console.warn(`Failed to load global artifact ${dirName}:`, error);
+        }
+      }
+      
+      return globalArtifacts;
+    } catch (error) {
+      // Global artifacts directory doesn't exist yet
+      return [];
+    }
+  }
+
+  async importGlobalArtifact(globalArtifactId: string): Promise<Artifact> {
+    const globalArtifactPath = path.join(this.globalArtifactsPath, globalArtifactId);
+    const metadataPath = path.join(globalArtifactPath, 'artifact.json');
+    
+    try {
+      const metadataContent = await fs.readFile(metadataPath, 'utf-8');
+      const globalArtifact = JSON.parse(metadataContent) as Artifact;
+      
+      // Create new local artifact with unique ID
+      const localArtifactId = uuidv4();
+      const localArtifact: Artifact = {
+        ...globalArtifact,
+        id: localArtifactId,
+        isGlobal: false,
+        importedFrom: globalArtifactId
+      };
+      
+      // Create local artifact
+      return await this.createArtifact({
+        title: localArtifact.title,
+        description: localArtifact.description,
+        html: localArtifact.html,
+        css: localArtifact.css,
+        javascript: localArtifact.javascript,
+        dataTemplates: localArtifact.dataTemplates,
+        dependencies: localArtifact.dependencies
+      });
+      
+    } catch (error) {
+      throw new Error(`Failed to import global artifact ${globalArtifactId}: ${error}`);
+    }
+  }
+
+  private getProjectIdFromPath(): string {
+    // Extract project ID from project path - this is a simple implementation
+    return path.basename(this.projectPath);
   }
 }

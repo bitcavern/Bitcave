@@ -23,6 +23,7 @@ export class AIService {
   private conversations: Map<string, AIConversation> = new Map();
   private logger: AILogger;
   private abortControllers: Map<string, AbortController> = new Map();
+  private pendingInlineExecutions: Map<string, any> = new Map(); // Track inline executions per conversation
 
   constructor(toolRegistry: AIToolRegistry, windowManager: WindowManager) {
     this.toolRegistry = toolRegistry;
@@ -43,7 +44,7 @@ export class AIService {
     return getOpenRouterToolDefinitions();
   }
 
-  async chat(conversationId: string, userMessage: string): Promise<string> {
+  async chat(conversationId: string, userMessage: string): Promise<{ content: string; inlineExecution?: any }> {
     console.log(
       `[AIService] Starting chat - conversationId: ${conversationId}, message: "${userMessage}"`
     );
@@ -96,7 +97,7 @@ export class AIService {
     conversationId: string,
     conversation: AIConversation,
     abortSignal: AbortSignal
-  ): Promise<string> {
+  ): Promise<{ content: string; inlineExecution?: any }> {
     while (true) {
       // Check if aborted
       if (abortSignal.aborted) {
@@ -176,12 +177,26 @@ export class AIService {
           `[AIService] Got content response:`,
           content.substring(0, 100)
         );
-        conversation.messages.push({
+        // Check if we have a pending inline execution for this conversation
+        const inlineExecution = this.pendingInlineExecutions.get(conversationId);
+        
+        const assistantMessage: any = {
           role: "assistant",
           content: content,
-        });
+        };
+
+        // Attach inline execution data if available
+        if (inlineExecution) {
+          assistantMessage.inlineExecution = inlineExecution;
+          this.pendingInlineExecutions.delete(conversationId); // Clear it after use
+        }
+
+        conversation.messages.push(assistantMessage);
         conversation.updatedAt = new Date();
-        return content;
+        return {
+          content,
+          inlineExecution: inlineExecution || undefined
+        };
       }
 
       // Case 3: No content, check reasoning and inject hidden user message
@@ -276,6 +291,11 @@ export class AIService {
           parsedArgs,
           result
         );
+
+        // Check if this is an inline code execution
+        if (toolCall.function.name === 'executeInlineCode' && result) {
+          this.pendingInlineExecutions.set(conversationId, result);
+        }
 
         // Add tool result to conversation
         const serializedResult = JSON.stringify(result, null, 2);
@@ -534,6 +554,31 @@ export class AIService {
 
     context +=
       "PRIMARY DIRECTIVE: When users ask for interactive tools, games, calculators, apps, or any functionality that requires HTML/CSS/JS, IMMEDIATELY use the createArtifactWindow tool. This is your PRIMARY tool for user requests.\n\n";
+
+    context += "CODE EXECUTION RULES:\n";
+    context += "1. ALWAYS use executeInlineCode for simple calculations and math:\n";
+    context +=
+      "   - Basic math: '5!', 'sqrt(144)', '2**10', trigonometry functions\n";
+    context +=
+      "   - Unit conversions: 'convert 100F to celsius', distance, weight conversions\n";
+    context +=
+      "   - Simple statistics: mean, median, mode of small datasets\n";
+    context +=
+      "   - Quick computations that can be solved in 1-3 lines of Python\n";
+    context += "2. ONLY use executeCodeInWindow for complex tasks:\n";
+    context +=
+      "   - Multi-step programs requiring debugging or extensive output\n";
+    context +=
+      "   - Code that needs to be saved, modified, or rerun multiple times\n";
+    context +=
+      "   - When user explicitly asks for a 'code window' or 'programming environment'\n";
+    context +=
+      "   - Complex data analysis with plots or extensive data processing\n";
+    context += "3. Default to executeInlineCode for any computational question unless complexity requires a window.\n";
+    context +=
+      "4. Use executeInlineCode naturally - don't announce you're calculating, just provide the result.\n";
+    context +=
+      "5. EXAMPLES: 'What is 5!' → executeInlineCode, 'Build a data analysis script' → executeCodeInWindow\n\n";
 
     context += "ARTIFACT CREATION EXAMPLES:\n";
     context +=

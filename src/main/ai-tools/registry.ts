@@ -22,6 +22,7 @@ export class AIToolRegistry {
   private tools: Map<string, AITool> = new Map();
   private windowManager: WindowManager;
   private codeExecutionSandbox: CodeExecutionSandbox;
+  private inlineExecutions: Map<string, any> = new Map(); // Store inline execution data
   private artifactManager: ArtifactManager | null = null;
   private mainWindow: BrowserWindow | null = null;
   private multiStepPlans: Map<
@@ -1093,9 +1094,9 @@ export class AIToolRegistry {
 
     // Code Execution Tool
     this.registerTool({
-      name: "executeCode",
+      name: "executeCodeInWindow",
       description:
-        "Execute Python or JavaScript code in a secure sandbox environment. This tool automatically creates a code execution window (if needed), fills it with your code, runs the code, and returns the output. Perfect for running calculations, data processing, or testing code snippets.",
+        "Execute complex Python or JavaScript code in a dedicated code execution window. Use this for multi-step programs, data analysis scripts, code that needs debugging, or when the user explicitly wants a code window. NOT for simple calculations - use executeInlineCode for quick math and basic computations.",
       parameters: {
         language: {
           type: "string",
@@ -1590,6 +1591,129 @@ export class AIToolRegistry {
 
           return response;
         }
+      },
+    });
+
+    // Inline Code Execution Tool
+    this.registerTool({
+      name: "executeInlineCode",
+      description:
+        "Execute simple Python code inline for immediate results in chat. ALWAYS use this for: basic math (5!, sqrt, trigonometry), unit conversions (temperature, distance), simple statistics (mean, median), quick calculations, and one-liner computations. Results appear directly in the conversation without creating a window.",
+      parameters: {
+        code: {
+          type: "string",
+          required: true,
+          description: "Python code to execute inline. Should be concise and focused on computation.",
+        },
+        description: {
+          type: "string",
+          required: false,
+          description: "Brief description of what the code does (e.g., 'Calculate factorial of 5')",
+        },
+      },
+      execute: async (params) => {
+        // Validate code
+        const code = params.code;
+        if (!code || typeof code !== "string" || !code.trim()) {
+          throw new Error("Code is required and must be a non-empty string");
+        }
+
+        // Create execution request
+        const request: CodeExecutionRequest = {
+          language: "python",
+          code: code.trim(),
+          timeout: 8000, // 8 seconds for inline execution
+          memoryLimit: 128, // 128MB for inline execution
+        };
+
+        // Execute code using existing sandbox
+        const result = await this.codeExecutionSandbox.executeCode(request);
+
+        // Store execution for potential code window creation
+        const executionId = `inline_${Date.now()}_${Math.random()
+          .toString(36)
+          .substring(2, 11)}`;
+
+        // Create inline execution result
+        const inlineResult = {
+          executionId,
+          success: result.success,
+          code: request.code,
+          output: result.output,
+          error: result.error,
+          executionTime: result.executionTime,
+          description: params.description || "Inline computation",
+          timestamp: new Date().toISOString(),
+          language: "python",
+          // Store the full execution data for potential code window creation
+          fullExecution: {
+            request,
+            result,
+          },
+        };
+
+        // Store the execution data for later retrieval
+        console.log(`[AIToolRegistry] Storing inline execution with ID: ${executionId}`);
+        this.inlineExecutions.set(executionId, inlineResult);
+
+        return inlineResult;
+      },
+    });
+
+    // Create Code Window from Inline Execution Tool
+    this.registerTool({
+      name: "createCodeWindowFromInline",
+      description:
+        "Create a code execution window from a previous inline execution. This is useful when the user wants to see the full source code or explore further.",
+      parameters: {
+        executionId: {
+          type: "string",
+          required: true,
+          description: "The execution ID from a previous inline execution",
+        },
+        windowPosition: {
+          type: "object",
+          required: false,
+          description: "Window position as {x: number, y: number}",
+        },
+      },
+      execute: async (params) => {
+        const position = params.windowPosition || { x: 100, y: 100 };
+        
+        console.log(`[AIToolRegistry] Looking for execution ID: ${params.executionId}`);
+        console.log(`[AIToolRegistry] Stored execution IDs: ${Array.from(this.inlineExecutions.keys()).join(', ')}`);
+        
+        // Retrieve the stored inline execution data
+        const inlineExecution = this.inlineExecutions.get(params.executionId);
+        
+        let code = "# Code from inline execution\n# No execution data found for ID: " + params.executionId;
+        let description = "Inline Execution";
+        
+        if (inlineExecution) {
+          code = inlineExecution.code;
+          description = inlineExecution.description || "Inline Execution";
+          console.log(`[AIToolRegistry] Found execution data:`, inlineExecution);
+        } else {
+          console.log(`[AIToolRegistry] No execution data found for ID: ${params.executionId}`);
+        }
+        
+        const window = await this.windowManager.createWindow("code-execution", {
+          title: description,
+          position,
+          size: { width: 600, height: 400 },
+          metadata: {
+            label: description,
+            code: code,
+            language: "python",
+            executionId: params.executionId,
+          },
+        });
+
+        this.triggerWindowCreated(window);
+        return {
+          window,
+          message: `Created code window: ${description}`,
+        };
       },
     });
   }

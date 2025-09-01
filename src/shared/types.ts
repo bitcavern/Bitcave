@@ -95,6 +95,10 @@ export interface Artifact {
   javascript?: string;
   dataTemplates?: DataTemplate[];
   dependencies?: string[];
+  createdAt?: Date;
+  isGlobal?: boolean;
+  originalProjectId?: string;
+  importedFrom?: string;
 }
 
 export interface ArtifactCreationRequest {
@@ -166,6 +170,31 @@ export interface MemoryEntry {
     context?: Record<string, any>;
   };
   embedding: number[];
+}
+
+// Inline Code Execution types
+export interface InlineExecution {
+  executionId: string;
+  code: string;
+  output?: string;
+  error?: string;
+  success: boolean;
+  description: string;
+  executionTime?: number;
+  language: string;
+  timestamp: string;
+  fullExecution?: {
+    request: CodeExecutionRequest;
+    result: CodeExecutionResult;
+  };
+}
+
+export interface ChatMessage {
+  id: string;
+  role: "user" | "assistant" | "system";
+  content: string;
+  timestamp: Date;
+  inlineExecution?: InlineExecution;
 }
 
 // AI Provider types

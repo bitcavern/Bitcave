@@ -110,7 +110,7 @@ export const ArtifactWindow: React.FC<ArtifactWindowProps> = ({
     return () => {
       iframe.removeEventListener('load', handleLoad);
     };
-  }, [artifact]);
+  }, [artifact.id, artifact.title, artifact.html, artifact.css, artifact.javascript, artifact.dependencies]);
 
   // Handle messages from the artifact iframe
   useEffect(() => {

@@ -5,6 +5,7 @@ import { WindowRenderer } from "./components/WindowRenderer";
 import { AISidebar } from "./components/AISidebar";
 import { LeftSidebar } from "./components/LeftSidebar";
 import { ProjectLauncher } from "./components/ProjectLauncher";
+import { ProjectIndicator } from "./components/ProjectIndicator";
 import type {
   BaseWindow,
   CanvasState,
@@ -385,31 +386,19 @@ export const App: React.FC = () => {
 
   return (
     <div style={{ width: "100%", height: "100%", position: "relative" }}>
-      {/* Grabbable title bar area */}
-      <div
-        style={{
-          position: "fixed",
-          top: 0,
-          left: leftSidebarVisible ? `${leftSidebarWidth}px` : "0",
-          right: 0,
-          height: "40px",
-          backgroundColor: "rgba(31, 41, 55, 0.2)",
-          backdropFilter: "blur(10px)",
-          zIndex: 200,
-          // @ts-ignore - WebkitAppRegion is a valid CSS property for Electron
-          WebkitAppRegion: "drag",
-          borderBottom: "1px solid rgba(75, 85, 99, 0.5)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          color: "#9ca3af",
-          fontSize: "14px",
-          fontWeight: "500",
-          transition: "left 0.3s ease",
+      {/* Project Indicator */}
+      <ProjectIndicator
+        leftSidebarVisible={leftSidebarVisible}
+        leftSidebarWidth={leftSidebarWidth}
+        onProjectChange={(projectId) => {
+          if (projectId) {
+            handleProjectOpen(projectId);
+          } else {
+            setCurrentProject(null);
+            setWindows([]);
+          }
         }}
-      >
-        Bitcave!
-      </div>
+      />
 
       <div 
         style={{ 

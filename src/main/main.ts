@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, globalShortcut } from "electron";
+import { app, BrowserWindow, ipcMain, globalShortcut, dialog } from "electron";
 import * as path from "path";
 import * as dotenv from "dotenv";
 import { WindowManager } from "./window-manager";
@@ -428,6 +428,17 @@ class BitcaveApp {
       }
     });
 
+    // Alternative handler name for modal component
+    ipcMain.handle("project:list-recent", async () => {
+      try {
+        const projects = await this.projectManager.getRecentProjects();
+        return projects;
+      } catch (error) {
+        console.error('Failed to get recent projects:', error);
+        return [];
+      }
+    });
+
     ipcMain.handle("projects:current", async () => {
       try {
         const project = this.projectManager.getCurrentProject();
@@ -495,6 +506,22 @@ class BitcaveApp {
         return { success: true };
       } catch (error) {
         return { success: false, error: (error as Error).message };
+      }
+    });
+
+    // Dialog handlers
+    ipcMain.handle("dialog:select-folder", async () => {
+      if (!this.mainWindow) return null;
+      
+      try {
+        const result = await dialog.showOpenDialog(this.mainWindow, {
+          properties: ['openDirectory'],
+          title: 'Select Project Folder'
+        });
+        return result;
+      } catch (error) {
+        console.error('Failed to show folder dialog:', error);
+        return { canceled: true, filePaths: [] };
       }
     });
 
@@ -710,6 +737,49 @@ class BitcaveApp {
           }
           await this.artifactManager.destroyArtifact(data.artifactId);
           return { success: true };
+        } catch (error) {
+          return { success: false, error: (error as Error).message };
+        }
+      }
+    );
+
+    // Global artifact management handlers
+    ipcMain.handle(
+      "artifact:save-globally", 
+      async (event, data: { artifactId: string; name?: string }) => {
+        try {
+          if (!this.artifactManager) {
+            throw new Error("Artifact manager not initialized - no project open");
+          }
+          await this.artifactManager.saveArtifactGlobally(data.artifactId, data.name);
+          return { success: true };
+        } catch (error) {
+          return { success: false, error: (error as Error).message };
+        }
+      }
+    );
+
+    ipcMain.handle("artifact:list-global", async () => {
+      try {
+        if (!this.artifactManager) {
+          throw new Error("Artifact manager not initialized - no project open");
+        }
+        const globalArtifacts = await this.artifactManager.loadGlobalArtifacts();
+        return { success: true, data: globalArtifacts };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    });
+
+    ipcMain.handle(
+      "artifact:import-global",
+      async (event, data: { globalArtifactId: string }) => {
+        try {
+          if (!this.artifactManager) {
+            throw new Error("Artifact manager not initialized - no project open");
+          }
+          const artifact = await this.artifactManager.importGlobalArtifact(data.globalArtifactId);
+          return { success: true, data: artifact };
         } catch (error) {
           return { success: false, error: (error as Error).message };
         }

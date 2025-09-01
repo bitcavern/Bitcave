@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import type { CanvasState, WindowType, BaseWindow } from "@/shared/types";
 import { WINDOW_CONFIGS } from "@/shared/constants";
+import { GlobalArtifactsModal } from "./GlobalArtifactsModal";
 
 interface ToolbarProps {
   onCreateWindow: (type: WindowType) => void;
@@ -31,6 +32,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [showMinimized, setShowMinimized] = useState(false);
+  const [showArtifactLibrary, setShowArtifactLibrary] = useState(false);
 
   const selectedWindow = selectedWindowId
     ? windows.find((w) => w.id === selectedWindowId)
@@ -497,6 +499,35 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           </button>
         )}
 
+        {/* Artifact Library */}
+        <button
+          onClick={() => setShowArtifactLibrary(true)}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "6px",
+            padding: "6px 10px",
+            backgroundColor: "#374151",
+            color: "white",
+            border: "none",
+            borderRadius: "6px",
+            cursor: "pointer",
+            fontSize: "12px",
+            fontWeight: "500",
+            transition: "all 0.2s",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = "#4b5563";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = "#374151";
+          }}
+          title="Browse and import global artifacts"
+        >
+          <span style={{ fontSize: "14px" }}>📚</span>
+          <span>Library</span>
+        </button>
+
         {/* Bit Status Indicator */}
         {/* <div
           style={{
@@ -540,6 +571,17 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           }}
         />
       )}
+
+      {/* Global Artifacts Library Modal */}
+      <GlobalArtifactsModal
+        isOpen={showArtifactLibrary}
+        onClose={() => setShowArtifactLibrary(false)}
+        onImportArtifact={async (artifactId) => {
+          // Create an artifact window with the imported artifact
+          onCreateWindow("artifact");
+          console.log('Imported artifact from toolbar:', artifactId);
+        }}
+      />
 
       <style>
         {`

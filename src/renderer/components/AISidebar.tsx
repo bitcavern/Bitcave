@@ -1,6 +1,141 @@
 import React, { useState, useRef, useEffect } from "react";
 import type { ReactNode } from "react";
-import type { BaseWindow } from "@/shared/types";
+import type { BaseWindow, ChatMessage, InlineExecution } from "@/shared/types";
+import { InlineExecution as InlineExecutionComponent } from "./InlineExecution";
+
+// Component for messages with hover functionality
+interface MessageWithHoverProps {
+  message: ChatMessage;
+  onCreateCodeWindow: (executionId: string) => void;
+  renderFormattedMessage: (content: string) => ReactNode;
+}
+
+const MessageWithHover: React.FC<MessageWithHoverProps> = ({
+  message,
+  onCreateCodeWindow,
+  renderFormattedMessage,
+}) => {
+  const [showMenu, setShowMenu] = useState(false);
+  const [hoverTimeout, setHoverTimeout] = useState<NodeJS.Timeout | null>(null);
+
+  const handleCreateCodeWindow = () => {
+    if (message.inlineExecution?.data) {
+      console.log('Frontend: Creating code window with execution ID:', message.inlineExecution.data.executionId);
+      console.log('Frontend: Full inline execution data:', message.inlineExecution.data);
+      onCreateCodeWindow(message.inlineExecution.data.executionId);
+    } else {
+      console.log('Frontend: No inline execution data found in message');
+      console.log('Frontend: Available inlineExecution:', message.inlineExecution);
+    }
+  };
+
+  const handleMouseEnter = () => {
+    if (message.inlineExecution?.data) {
+      // Clear any existing timeout
+      if (hoverTimeout) {
+        clearTimeout(hoverTimeout);
+        setHoverTimeout(null);
+      }
+      setShowMenu(true);
+    }
+  };
+
+  const handleMouseLeave = () => {
+    // Add a delay before hiding the menu
+    const timeout = setTimeout(() => {
+      setShowMenu(false);
+    }, 300); // 300ms delay
+    setHoverTimeout(timeout);
+  };
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (hoverTimeout) {
+        clearTimeout(hoverTimeout);
+      }
+    };
+  }, [hoverTimeout]);
+
+  return (
+    <div
+      style={{
+        position: "relative",
+        width: "100%",
+        paddingBottom: "40px", // Extra space for the button area
+        marginBottom: "8px", // Extra margin to ensure hover area
+      }}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+    >
+      <div style={{ overflowX: "auto" }}>
+        {renderFormattedMessage(message.content)}
+      </div>
+      
+      {/* Small Icon Button Below Message */}
+      {showMenu && message.inlineExecution?.data && (
+        <button
+          onClick={handleCreateCodeWindow}
+          style={{
+            position: "absolute",
+            top: "100%",
+            right: "8px",
+            marginTop: "4px",
+            background: "#3b82f6",
+            border: "none",
+            borderRadius: "50%",
+            width: "24px",
+            height: "24px",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: "12px",
+            color: "white",
+            boxShadow: "0 2px 8px rgba(59, 130, 246, 0.3)",
+            transition: "all 0.2s ease",
+            zIndex: 1000,
+            animation: "fadeIn 0.2s ease-in-out",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.transform = "scale(1.1)";
+            e.currentTarget.style.boxShadow = "0 4px 12px rgba(59, 130, 246, 0.4)";
+            // Keep menu visible when hovering the button and clear any hide timeout
+            if (hoverTimeout) {
+              clearTimeout(hoverTimeout);
+              setHoverTimeout(null);
+            }
+            setShowMenu(true);
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.transform = "scale(1)";
+            e.currentTarget.style.boxShadow = "0 2px 8px rgba(59, 130, 246, 0.3)";
+            // Start the hide timeout when leaving the button
+            handleMouseLeave();
+          }}
+          title="Open source in code editor"
+        >
+          📝
+        </button>
+      )}
+
+      <style>
+        {`
+          @keyframes fadeIn {
+            0% { 
+              opacity: 0; 
+              transform: translateY(-4px); 
+            }
+            100% { 
+              opacity: 1; 
+              transform: translateY(0); 
+            }
+          }
+        `}
+      </style>
+    </div>
+  );
+};
 
 interface AISidebarProps {
   windows: BaseWindow[];
@@ -8,12 +143,6 @@ interface AISidebarProps {
   onWidthChange?: (width: number) => void;
 }
 
-interface ChatMessage {
-  id: string;
-  role: "user" | "assistant" | "system";
-  content: string;
-  timestamp: Date;
-}
 
 interface APIKeyModalProps {
   isOpen: boolean;
@@ -528,12 +657,17 @@ export const AISidebar: React.FC<AISidebarProps> = ({
       });
 
       if (result.success) {
+        const responseData = result.data as { content: string; inlineExecution?: any };
+        console.log('AISidebar: Response data received:', responseData);
+        
         const assistantMessage: ChatMessage = {
           id: (Date.now() + 1).toString(),
           role: "assistant",
-          content: (result.data as string).replace(/^\s+/, ""),
+          content: responseData.content.replace(/^\s+/, ""),
           timestamp: new Date(),
+          inlineExecution: responseData.inlineExecution,
         };
+        console.log('AISidebar: Assistant message created:', assistantMessage);
         setMessages((prev) => [...prev, assistantMessage]);
       } else {
         const errorMessage: ChatMessage = {
@@ -566,6 +700,27 @@ export const AISidebar: React.FC<AISidebarProps> = ({
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSubmit();
+    }
+  };
+
+  const handleCreateCodeWindow = async (executionId: string) => {
+    console.log('AISidebar: handleCreateCodeWindow called with executionId:', executionId);
+    try {
+      const result = await window.electronAPI.invoke("ai:execute-tool", {
+        toolName: "createCodeWindowFromInline",
+        parameters: {
+          executionId,
+          windowPosition: { x: 150, y: 150 },
+        },
+      });
+
+      console.log('AISidebar: Tool execution result:', result);
+
+      if (!result.success) {
+        console.error("Failed to create code window:", result.error);
+      }
+    } catch (error) {
+      console.error("Failed to create code window:", error);
     }
   };
 
@@ -749,9 +904,11 @@ export const AISidebar: React.FC<AISidebarProps> = ({
               }`,
             }}
           >
-            <div style={{ overflowX: "auto" }}>
-              {renderFormattedMessage(message.content)}
-            </div>
+            <MessageWithHover 
+              message={message}
+              onCreateCodeWindow={handleCreateCodeWindow}
+              renderFormattedMessage={renderFormattedMessage}
+            />
           </div>
         ))}
 

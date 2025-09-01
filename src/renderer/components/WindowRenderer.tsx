@@ -8,6 +8,7 @@ import { WINDOW_CONFIGS, APP_CONFIG } from "@/shared/constants";
 import CodeExecutionWindow from "../windows/CodeExecutionWindow";
 import { WebviewWindow } from "../windows/WebviewWindow";
 import { ArtifactWindow } from "../windows/ArtifactWindow";
+import { GlobalArtifactsModal } from "./GlobalArtifactsModal";
 
 interface WindowRendererProps {
   window: BaseWindow;
@@ -42,6 +43,7 @@ export const WindowRenderer: React.FC<WindowRendererProps> = ({
   const windowRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
+  const [showGlobalArtifactsModal, setShowGlobalArtifactsModal] = useState(false);
   const [dragStart, setDragStart] = useState({
     x: 0,
     y: 0,
@@ -329,7 +331,99 @@ export const WindowRenderer: React.FC<WindowRendererProps> = ({
           )}
         </div>
 
-        <div style={{ display: "flex", gap: "4px" }}>
+        <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
+          {/* Artifact management buttons */}
+          {window.type === 'artifact' && (
+            <>
+              <button
+                style={{
+                  background: "rgba(34, 197, 94, 0.2)",
+                  border: "1px solid rgba(34, 197, 94, 0.3)",
+                  borderRadius: "4px",
+                  padding: "2px 6px",
+                  fontSize: "10px",
+                  color: "#22c55e",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "2px"
+                }}
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  try {
+                    const artifactId = window.metadata?.artifact?.id;
+                    if (artifactId) {
+                      const result = await (window as any).electronAPI.invoke('artifact:save-globally', {
+                        artifactId,
+                        name: window.title
+                      });
+                      if (result.success) {
+                        // Show success feedback
+                        const button = e.currentTarget;
+                        const originalText = button.textContent;
+                        button.textContent = '✓ Saved!';
+                        button.style.backgroundColor = 'rgba(34, 197, 94, 0.3)';
+                        setTimeout(() => {
+                          button.textContent = originalText;
+                          button.style.backgroundColor = 'rgba(34, 197, 94, 0.2)';
+                        }, 2000);
+                      }
+                    } else {
+                      // Show error feedback
+                      const button = e.currentTarget;
+                      const originalText = button.textContent;
+                      button.textContent = '❌ No artifact';
+                      button.style.backgroundColor = 'rgba(239, 68, 68, 0.2)';
+                      button.style.color = '#ef4444';
+                      setTimeout(() => {
+                        button.textContent = originalText;
+                        button.style.backgroundColor = 'rgba(34, 197, 94, 0.2)';
+                        button.style.color = '#22c55e';
+                      }, 2000);
+                    }
+                  } catch (error) {
+                    console.error('Failed to save artifact globally:', error);
+                    // Show error feedback
+                    const button = e.currentTarget;
+                    const originalText = button.textContent;
+                    button.textContent = '❌ Error';
+                    button.style.backgroundColor = 'rgba(239, 68, 68, 0.2)';
+                    button.style.color = '#ef4444';
+                    setTimeout(() => {
+                      button.textContent = originalText;
+                      button.style.backgroundColor = 'rgba(34, 197, 94, 0.2)';
+                      button.style.color = '#22c55e';
+                    }, 2000);
+                  }
+                }}
+                title="Save artifact globally for use in other projects"
+              >
+                💾 Save
+              </button>
+              <button
+                style={{
+                  background: "rgba(59, 130, 246, 0.2)",
+                  border: "1px solid rgba(59, 130, 246, 0.3)",
+                  borderRadius: "4px",
+                  padding: "2px 6px",
+                  fontSize: "10px",
+                  color: "#3b82f6",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "2px"
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowGlobalArtifactsModal(true);
+                }}
+                title="Browse and import global artifacts"
+              >
+                📚 Library
+              </button>
+            </>
+          )}
+          
           <button
             style={{
               width: "16px",
@@ -460,6 +554,19 @@ export const WindowRenderer: React.FC<WindowRendererProps> = ({
             onMouseDown={(e) => handleResizeMouseDown(e, "e")}
           />
         </>
+      )}
+      
+      {/* Global Artifacts Modal */}
+      {showGlobalArtifactsModal && (
+        <GlobalArtifactsModal
+          isOpen={showGlobalArtifactsModal}
+          onClose={() => setShowGlobalArtifactsModal(false)}
+          onImportArtifact={(artifactId) => {
+            // Handle imported artifact - create a new artifact window
+            console.log('Imported artifact:', artifactId);
+            // The modal handles the actual import through IPC
+          }}
+        />
       )}
     </div>
   );

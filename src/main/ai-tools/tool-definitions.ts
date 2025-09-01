@@ -355,9 +355,48 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
     },
   },
   {
-    name: "executeCode",
+    name: "executeInlineCode",
     description:
-      "Execute Python or JavaScript code in a secure sandbox environment. This tool automatically creates a code execution window (if needed), fills it with your code, runs the code, and returns the output. Perfect for running calculations, data processing, or testing code snippets.",
+      "Execute simple Python code inline for immediate results in chat. ALWAYS use this for: basic math (5!, sqrt, trigonometry), unit conversions (temperature, distance), simple statistics (mean, median), quick calculations, and one-liner computations. Results appear directly in the conversation without creating a window.",
+    parameters: {
+      code: {
+        type: "string",
+        required: true,
+        description: "Python code to execute inline. Should be concise and focused on computation.",
+      },
+      description: {
+        type: "string",
+        required: false,
+        description: "Brief description of what the code does (e.g., 'Calculate factorial of 5')",
+      },
+    },
+    openRouterTool: {
+      type: "function",
+      function: {
+        name: "executeInlineCode",
+        description:
+          "Execute simple Python code inline for immediate results in chat. ALWAYS use this for: basic math (5!, sqrt, trigonometry), unit conversions (temperature, distance), simple statistics (mean, median), quick calculations, and one-liner computations. Results appear directly in the conversation without creating a window.",
+        parameters: {
+          type: "object",
+          properties: {
+            code: {
+              type: "string",
+              description: "Python code to execute inline. Should be concise and focused on computation.",
+            },
+            description: {
+              type: "string",
+              description: "Brief description of what the code does (e.g., 'Calculate factorial of 5')",
+            },
+          },
+          required: ["code"],
+        },
+      },
+    },
+  },
+  {
+    name: "executeCodeInWindow",
+    description:
+      "Execute complex Python or JavaScript code in a dedicated code execution window. Use this for multi-step programs, data analysis scripts, code that needs debugging, or when the user explicitly wants a code window. NOT for simple calculations - use executeInlineCode for quick math and basic computations.",
     parameters: {
       language: {
         type: "string",
@@ -380,9 +419,9 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
     openRouterTool: {
       type: "function",
       function: {
-        name: "executeCode",
+        name: "executeCodeInWindow",
         description:
-          "Execute Python or JavaScript code in a secure sandbox environment. This tool automatically creates a code execution window (if needed), fills it with your code, runs the code, and returns the output. Perfect for running calculations, data processing, or testing code snippets.",
+          "Execute complex Python or JavaScript code in a dedicated code execution window. Use this for multi-step programs, data analysis scripts, code that needs debugging, or when the user explicitly wants a code window. NOT for simple calculations - use executeInlineCode for quick math and basic computations.",
         parameters: {
           type: "object",
           properties: {
