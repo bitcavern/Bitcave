@@ -416,6 +416,7 @@ export const App: React.FC = () => {
             <WindowRenderer
               key={window.id}
               window={window}
+              windows={windows}
               isSelected={selectedWindowId === window.id}
               onSelect={() => setSelectedWindowId(window.id)}
               onDelete={() => handleDeleteWindow(window.id)}

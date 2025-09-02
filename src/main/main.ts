@@ -1,5 +1,6 @@
 import { app, BrowserWindow, ipcMain, globalShortcut, dialog } from "electron";
 import * as path from "path";
+import * as fs from "fs";
 import * as dotenv from "dotenv";
 import { WindowManager } from "./window-manager";
 import { AIToolRegistry } from "./ai-tools/registry";
@@ -464,7 +465,7 @@ class BitcaveApp {
         // Initialize artifact manager for the opened project
         const project = this.projectManager.getCurrentProject();
         if (project) {
-          const projectPath = this.projectManager.getProjectPath();
+          const projectPath = await this.projectManager.getProjectPath();
           if (projectPath) {
             this.artifactManager = new ArtifactManager(projectPath);
             await this.artifactManager.loadExistingArtifacts();
@@ -500,9 +501,9 @@ class BitcaveApp {
       }
     });
 
-    ipcMain.handle("projects:delete", async (event, data: { projectId: string }) => {
+    ipcMain.handle("projects:delete", async (event, projectId: string) => {
       try {
-        await this.projectManager.deleteProject(data.projectId);
+        await this.projectManager.deleteProject(projectId);
         return { success: true };
       } catch (error) {
         return { success: false, error: (error as Error).message };
@@ -515,13 +516,55 @@ class BitcaveApp {
       
       try {
         const result = await dialog.showOpenDialog(this.mainWindow, {
-          properties: ['openDirectory'],
+          properties: ['openDirectory', 'createDirectory'],
           title: 'Select Project Folder'
         });
         return result;
       } catch (error) {
         console.error('Failed to show folder dialog:', error);
         return { canceled: true, filePaths: [] };
+      }
+    });
+
+    ipcMain.handle("files:list", async () => {
+      try {
+        const projectRoot = await this.projectManager.getProjectRoot();
+        if (!projectRoot) {
+          return { success: true, data: [] };
+        }
+
+        const readDir = async (dir: string): Promise<any[]> => {
+          const entries = await require('fs/promises').readdir(dir, { withFileTypes: true });
+          const files = await Promise.all(entries.map(async (entry: fs.Dirent) => {
+            if (entry.name.startsWith('.')) {
+              return null;
+            }
+            const fullPath = require('path').join(dir, entry.name);
+            if (entry.isDirectory()) {
+              if (entry.name === '.bitcave') {
+                return null;
+              }
+              return {
+                name: entry.name,
+                path: fullPath,
+                isDirectory: true,
+                children: await readDir(fullPath)
+              };
+            } else {
+              return {
+                name: entry.name,
+                path: fullPath,
+                isDirectory: false
+              };
+            }
+          }));
+          return files.filter(file => file !== null);
+        }
+
+        const files = await readDir(projectRoot);
+        return { success: true, data: files };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
       }
     });
 

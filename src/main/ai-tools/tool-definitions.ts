@@ -415,6 +415,8 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
         description:
           "Optional description of what the code does (will be used as window title)",
       },
+      windowPosition: { type: "object", required: false, description: "Window position as {x: number, y: number}, defaults to {x: 100, y: 100}" },
+      windowSize: { type: "object", required: false, description: "Window size as {width: number, height: number}, defaults to {width: 400, height: 300}" },
     },
     openRouterTool: {
       type: "function",
@@ -440,6 +442,8 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
               description:
                 "Optional description of what the code does (will be used as window title)",
             },
+            windowPosition: { type: "object", properties: { x: { type: "number" }, y: { type: "number" } }, description: "Window position as {x: number, y: number}, defaults to {x: 100, y: 100}" },
+            windowSize: { type: "object", properties: { width: { type: "number" }, height: { type: "number" } }, description: "Window size as {width: number, height: number}, defaults to {width: 400, height: 300}" },
           },
           required: ["language", "code"],
         },

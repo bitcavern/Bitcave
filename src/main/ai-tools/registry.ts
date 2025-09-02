@@ -1115,6 +1115,16 @@ export class AIToolRegistry {
           description:
             "Optional description of what the code does (will be used as window title)",
         },
+        windowPosition: {
+          type: "object",
+          required: false,
+          description: "Window position as {x: number, y: number}",
+        },
+        windowSize: {
+          type: "object",
+          required: false,
+          description: "Window size as {width: number, height: number}",
+        },
       },
       execute: async (params) => {
         // Validate language
@@ -1236,6 +1246,8 @@ export class AIToolRegistry {
           );
           window = await this.windowManager.createWindow("code-execution", {
             title: label,
+            position: params.windowPosition || { x: 100, y: 100 },
+            size: params.windowSize || { width: 600, height: 800 },
             metadata: {
               label: label,
               code: request.code,

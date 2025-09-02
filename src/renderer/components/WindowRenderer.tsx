@@ -12,6 +12,7 @@ import { GlobalArtifactsModal } from "./GlobalArtifactsModal";
 
 interface WindowRendererProps {
   window: BaseWindow;
+  windows: BaseWindow[];
   isSelected: boolean;
   onSelect: () => void;
   onDelete: () => void;
@@ -29,6 +30,44 @@ const snapToGrid = (value: number, gridSize: number): number => {
   return Math.round(value / gridSize) * gridSize;
 };
 
+const findNearestEmptySpace = (draggedWindow: BaseWindow, windows: BaseWindow[]): { x: number, y: number } => {
+  const { x, y, width, height } = draggedWindow.position;
+  const otherWindows = windows.filter(w => w.id !== draggedWindow.id);
+
+  let bestPosition = { x, y };
+  let minDistance = Infinity;
+  let isOverlapping = false;
+
+  for (const w of otherWindows) {
+    if (
+      x < w.position.x + w.size.width &&
+      x + width > w.position.x &&
+      y < w.position.y + w.size.height &&
+      y + height > w.position.y
+    ) {
+      isOverlapping = true;
+
+      // Calculate potential snap positions
+      const snapPositions = [
+        { x: w.position.x + w.size.width, y: w.position.y }, // Right
+        { x: w.position.x - width, y: w.position.y }, // Left
+        { x: w.position.x, y: w.position.y + w.size.height }, // Bottom
+        { x: w.position.x, y: w.position.y - height }, // Top
+      ];
+
+      for (const pos of snapPositions) {
+        const distance = Math.sqrt(Math.pow(pos.x - x, 2) + Math.pow(pos.y - y, 2));
+        if (distance < minDistance) {
+          minDistance = distance;
+          bestPosition = pos;
+        }
+      }
+    }
+  }
+
+  return isOverlapping ? bestPosition : { x, y };
+};
+
 export const WindowRenderer: React.FC<WindowRendererProps> = ({
   window,
   isSelected,
@@ -39,10 +78,12 @@ export const WindowRenderer: React.FC<WindowRendererProps> = ({
   onUpdate,
   onExecuteCode,
   snapToGrid: snapToGridEnabled = APP_CONFIG.grid.snapEnabled,
+  windows,
 }) => {
   const windowRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
+  const [opacity, setOpacity] = useState(1);
   const [showGlobalArtifactsModal, setShowGlobalArtifactsModal] = useState(false);
   const [dragStart, setDragStart] = useState({
     x: 0,
@@ -152,6 +193,23 @@ export const WindowRenderer: React.FC<WindowRendererProps> = ({
           newX = snapToGrid(newX, APP_CONFIG.grid.size);
           newY = snapToGrid(newY, APP_CONFIG.grid.size);
         }
+
+        // Check for collisions
+        let colliding = false;
+        for (const w of windows) {
+          if (w.id === window.id) continue;
+          if (
+            newX < w.position.x + w.size.width &&
+            newX + window.size.width > w.position.x &&
+            newY < w.position.y + w.size.height &&
+            newY + window.size.height > w.position.y
+          ) {
+            colliding = true;
+            break;
+          }
+        }
+
+        setOpacity(colliding ? 0.5 : 1);
         
         onMove({ x: newX, y: newY });
       } else if (isResizing) {
@@ -200,8 +258,13 @@ export const WindowRenderer: React.FC<WindowRendererProps> = ({
     };
 
     const handleMouseUp = () => {
+      if (isDragging) {
+        const newPosition = findNearestEmptySpace(window, windows);
+        onMove(newPosition);
+      }
       setIsDragging(false);
       setIsResizing(false);
+      setOpacity(1);
     };
 
     if (isDragging || isResizing) {
@@ -237,7 +300,7 @@ export const WindowRenderer: React.FC<WindowRendererProps> = ({
         top: window.position.y,
         width: window.size.width,
         height: window.size.height,
-        zIndex: window.zIndex,
+        zIndex: isDragging ? 1000 : window.zIndex,
         backgroundColor: "#374151",
         border: isSelected ? "2px solid #3b82f6" : "1px solid #4b5563",
         borderRadius: "8px",
@@ -245,9 +308,14 @@ export const WindowRenderer: React.FC<WindowRendererProps> = ({
           "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)",
         overflow: "hidden",
         userSelect: "none",
-        opacity: window.isLocked ? 0.8 : 1,
+        opacity: isDragging ? opacity : (window.isLocked ? 0.8 : 1),
       }}
       onClick={onSelect}
+      onMouseDown={(e) => {
+        if (e.button === 2) { // Right click
+          handleTitleMouseDown(e);
+        }
+      }}
     >
       {/* Title Bar */}
       <div

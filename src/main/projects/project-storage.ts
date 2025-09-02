@@ -9,9 +9,9 @@ export class ProjectStorageService {
   private configPath: string;
 
   constructor() {
-    this.basePath = path.join(os.homedir(), '.bitcave');
-    this.projectsPath = path.join(this.basePath, 'projects');
-    this.configPath = path.join(this.basePath, 'config');
+    this.basePath = path.join(os.homedir(), 'Documents', 'Bitcave');
+    this.projectsPath = this.basePath;
+    this.configPath = path.join(os.homedir(), '.bitcave', 'config');
   }
 
   async initialize(): Promise<void> {
@@ -22,12 +22,11 @@ export class ProjectStorageService {
     const directories = [
       this.basePath,
       this.configPath,
-      this.projectsPath,
-      path.join(this.basePath, 'memory', 'global'),
-      path.join(this.basePath, 'memory', 'indexes'),
-      path.join(this.basePath, 'logs'),
-      path.join(this.basePath, 'logs', 'ai-interactions'),
-      path.join(this.projectsPath, 'templates')
+      path.join(os.homedir(), '.bitcave', 'memory', 'global'),
+      path.join(os.homedir(), '.bitcave', 'memory', 'indexes'),
+      path.join(os.homedir(), '.bitcave', 'logs'),
+      path.join(os.homedir(), '.bitcave', 'logs', 'ai-interactions'),
+      path.join(this.basePath, 'templates')
     ];
 
     for (const dir of directories) {
@@ -76,7 +75,7 @@ export class ProjectStorageService {
   }
 
   async createProject(project: Project): Promise<void> {
-    const projectPath = this.getProjectPath(project.id, project.folderPath);
+    const projectPath = this.getProjectPath(project.id, project.folderPath, project.name);
     
     // Create project directory structure
     const directories = [
@@ -95,7 +94,7 @@ export class ProjectStorageService {
     }
 
     // Write project metadata
-    await this.writeProjectFile(project.id, 'project.json', project, project.folderPath);
+    await this.writeProjectFile(project.id, 'project.json', project, project.folderPath, project.name);
     
     // Create initial workspace state
     const initialWorkspace: WorkspaceState = {
@@ -110,7 +109,7 @@ export class ProjectStorageService {
       timestamp: new Date()
     };
     
-    await this.writeProjectFile(project.id, 'workspace.json', initialWorkspace, project.folderPath);
+    await this.writeProjectFile(project.id, 'workspace.json', initialWorkspace, project.folderPath, project.name);
     
     // Update recent projects
     await this.addToRecentProjects(project);
@@ -122,8 +121,9 @@ export class ProjectStorageService {
       const projectRegistry = await this.getProjectRegistry();
       const projectEntry = projectRegistry.find(p => p.id === projectId);
       const customPath = projectEntry?.folderPath;
+      const projectName = projectEntry?.name;
       
-      return await this.readProjectFile<Project>(projectId, 'project.json', customPath);
+      return await this.readProjectFile<Project>(projectId, 'project.json', customPath, projectName);
     } catch (error) {
       console.error(`Failed to load project ${projectId}:`, error);
       return null;
@@ -132,22 +132,20 @@ export class ProjectStorageService {
 
   async listProjects(): Promise<ProjectInfo[]> {
     try {
-      const entries = await fs.readdir(this.projectsPath, { withFileTypes: true });
+      const projectRegistry = await this.getProjectRegistry();
       const projects: ProjectInfo[] = [];
 
-      for (const entry of entries) {
-        if (entry.isDirectory() && entry.name !== 'templates') {
-          const project = await this.getProject(entry.name);
-          if (project) {
-            projects.push({
-              id: project.id,
-              name: project.name,
-              description: project.description,
-              createdAt: project.createdAt,
-              updatedAt: project.updatedAt,
-              lastAccessedAt: project.lastAccessedAt
-            });
-          }
+      for (const projectEntry of projectRegistry) {
+        const project = await this.getProject(projectEntry.id);
+        if (project) {
+          projects.push({
+            id: project.id,
+            name: project.name,
+            description: project.description,
+            createdAt: project.createdAt,
+            updatedAt: project.updatedAt,
+            lastAccessedAt: project.lastAccessedAt
+          });
         }
       }
 
@@ -187,26 +185,36 @@ export class ProjectStorageService {
   }
 
   async saveWorkspace(projectId: string, workspace: WorkspaceState): Promise<void> {
-    await this.writeProjectFile(projectId, 'workspace.json', workspace);
+    const project = await this.getProject(projectId);
+    if (!project) return;
+
+    await this.writeProjectFile(projectId, 'workspace.json', workspace, project.folderPath, project.name);
     await this.updateProjectMetadata(projectId, { updatedAt: new Date() });
   }
 
   async loadWorkspace(projectId: string): Promise<WorkspaceState | null> {
-    return await this.readProjectFile<WorkspaceState>(projectId, 'workspace.json');
+    const project = await this.getProject(projectId);
+    if (!project) return null;
+
+    return await this.readProjectFile<WorkspaceState>(projectId, 'workspace.json', project.folderPath, project.name);
   }
 
   async updateProjectMetadata(projectId: string, updates: Partial<Project>): Promise<void> {
     const project = await this.getProject(projectId);
     if (project) {
       const updatedProject = { ...project, ...updates };
-      await this.writeProjectFile(projectId, 'project.json', updatedProject);
+      await this.writeProjectFile(projectId, 'project.json', updatedProject, project.folderPath, project.name);
     }
   }
 
   async deleteProject(projectId: string): Promise<void> {
-    const projectPath = this.getProjectPath(projectId);
+    const project = await this.getProject(projectId);
+    if (!project) return;
+
+    const projectPath = this.getProjectPath(projectId, project.folderPath, project.name);
     await fs.rm(projectPath, { recursive: true, force: true });
     await this.removeFromRecentProjects(projectId);
+    await this.removeProjectFromRegistry(projectId);
   }
 
   private async addToRecentProjects(project: Project): Promise<void> {
@@ -257,21 +265,43 @@ export class ProjectStorageService {
     await this.writeConfigFile('recent-projects.json', filtered);
   }
 
-  private getProjectPath(projectId: string, customPath?: string): string {
-    if (customPath) {
-      return path.join(customPath, '.bitcave-project');
-    }
-    return path.join(this.projectsPath, projectId);
+  private async removeProjectFromRegistry(projectId: string): Promise<void> {
+    const registry = await this.getProjectRegistry();
+    const filtered = registry.filter(p => p.id !== projectId);
+    await this.writeConfigFile('project-registry.json', filtered);
   }
 
-  private async writeProjectFile(projectId: string, filename: string, data: any, customPath?: string): Promise<void> {
-    const filePath = path.join(this.getProjectPath(projectId, customPath), filename);
+  getDefaultProjectPath(projectName: string): string {
+    return path.join(this.projectsPath, projectName);
+  }
+
+  getProjectPath(projectId: string, customPath?: string, projectName?: string): string {
+    if (customPath) {
+      return path.join(customPath, '.bitcave');
+    }
+    // Fallback for old projects
+    const oldPath = path.join(this.projectsPath, projectId);
+    if (require('fs').existsSync(oldPath)) {
+      return oldPath;
+    }
+
+    if (!projectName) {
+      // This should not happen for new projects
+      console.warn('Project name not provided for new project');
+      return path.join(this.projectsPath, projectId);
+    }
+
+    return this.getDefaultProjectPath(projectName);
+  }
+
+  private async writeProjectFile(projectId: string, filename: string, data: any, customPath?: string, projectName?: string): Promise<void> {
+    const filePath = path.join(this.getProjectPath(projectId, customPath, projectName), filename);
     await fs.writeFile(filePath, JSON.stringify(data, null, 2));
   }
 
-  private async readProjectFile<T>(projectId: string, filename: string, customPath?: string): Promise<T | null> {
+  private async readProjectFile<T>(projectId: string, filename: string, customPath?: string, projectName?: string): Promise<T | null> {
     try {
-      const filePath = path.join(this.getProjectPath(projectId, customPath), filename);
+      const filePath = path.join(this.getProjectPath(projectId, customPath, projectName), filename);
       const data = await fs.readFile(filePath, 'utf-8');
       return JSON.parse(data);
     } catch {
@@ -299,11 +329,15 @@ export class ProjectStorageService {
     return this.basePath;
   }
 
-  getProjectAssetsPath(projectId: string): string {
-    return path.join(this.getProjectPath(projectId), 'assets');
+  async getProjectAssetsPath(projectId: string): Promise<string | null> {
+    const project = await this.getProject(projectId);
+    if (!project) return null;
+    return path.join(this.getProjectPath(projectId, project.folderPath, project.name), 'assets');
   }
 
-  getProjectArtifactsPath(projectId: string): string {
-    return path.join(this.getProjectPath(projectId), 'artifacts');
+  async getProjectArtifactsPath(projectId: string): Promise<string | null> {
+    const project = await this.getProject(projectId);
+    if (!project) return null;
+    return path.join(this.getProjectPath(projectId, project.folderPath, project.name), 'artifacts');
   }
 }

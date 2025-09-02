@@ -15,6 +15,7 @@ export const Canvas: React.FC<CanvasProps> = ({
 }) => {
   const canvasRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [isMouseOverCanvas, setIsMouseOverCanvas] = useState(true);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [lastViewport, setLastViewport] = useState(state.viewport);
 
@@ -144,7 +145,7 @@ export const Canvas: React.FC<CanvasProps> = ({
         height: "100%",
         position: "relative",
         overflow: "hidden",
-        cursor: isDragging ? "grabbing" : "grab",
+        cursor: isDragging ? "grabbing" : (isMouseOverCanvas ? "grab" : "default"),
         backgroundColor: "#1f2937",
         backgroundImage: `
           linear-gradient(to right, rgba(255,255,255,0.1) 1px, transparent 1px),
@@ -163,6 +164,8 @@ export const Canvas: React.FC<CanvasProps> = ({
           width: "100%",
           height: "100%",
         }}
+        onMouseEnter={() => setIsMouseOverCanvas(false)}
+        onMouseLeave={() => setIsMouseOverCanvas(true)}
       >
         {children}
       </div>

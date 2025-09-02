@@ -87,6 +87,28 @@ export const ProjectLauncher: React.FC<ProjectLauncherProps> = ({
     }
   };
 
+  const handleDeleteProject = async (projectId: string) => {
+    // Optional: Add a confirmation dialog
+    if (!confirm('Are you sure you want to delete this project? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      const result = await (window as any).electronAPI.invoke("projects:delete", projectId);
+      if (result.success) {
+        // Reload projects to reflect the deletion
+        loadProjects();
+      } else {
+        console.error("Failed to delete project:", result.error);
+        // Optional: Show an error message to the user
+        alert(`Failed to delete project: ${result.error.message}`);
+      }
+    } catch (error) {
+      console.error("Error deleting project:", error);
+      alert('An unexpected error occurred while deleting the project.');
+    }
+  };
+
   const formatDate = (date: Date | string) => {
     const d = new Date(date);
     return d.toLocaleDateString("en-US", {
@@ -469,7 +491,10 @@ export const ProjectLauncher: React.FC<ProjectLauncherProps> = ({
                   )}
                   <div style={{
                     borderTop: "1px solid rgba(255, 255, 255, 0.1)",
-                    paddingTop: "0.75rem"
+                    paddingTop: "0.75rem",
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center'
                   }}>
                     <span style={{
                       color: "#64748b",
@@ -477,6 +502,22 @@ export const ProjectLauncher: React.FC<ProjectLauncherProps> = ({
                     }}>
                       Created {formatDate(project.createdAt)}
                     </span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteProject(project.id);
+                      }}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: '#94a3b8',
+                        fontSize: '1.25rem',
+                        cursor: 'pointer',
+                        padding: '0.5rem',
+                      }}
+                    >
+                      &times;
+                    </button>
                   </div>
                 </div>
               ))}
@@ -501,12 +542,10 @@ export const ProjectLauncher: React.FC<ProjectLauncherProps> = ({
                     border: "1px solid rgba(255, 255, 255, 0.1)",
                     borderRadius: "0.5rem",
                     padding: "1.25rem",
-                    cursor: "pointer",
                     display: "flex",
                     justifyContent: "space-between",
                     alignItems: "center"
                   }}
-                  onClick={() => onProjectOpen(project.id)}
                   onMouseEnter={(e) => {
                     e.currentTarget.style.background = "rgba(255, 255, 255, 0.08)";
                     e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.2)";
@@ -516,7 +555,10 @@ export const ProjectLauncher: React.FC<ProjectLauncherProps> = ({
                     e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.1)";
                   }}
                 >
-                  <div>
+                  <div 
+                    onClick={() => onProjectOpen(project.id)}
+                    style={{flexGrow: 1, cursor: 'pointer'}}
+                  >
                     <h3 style={{
                       fontSize: "1.1rem",
                       fontWeight: "600",
@@ -535,7 +577,8 @@ export const ProjectLauncher: React.FC<ProjectLauncherProps> = ({
                     display: "flex",
                     flexDirection: "column",
                     alignItems: "flex-end",
-                    gap: "0.25rem"
+                    gap: "0.25rem",
+                    marginRight: '1rem'
                   }}>
                     <span style={{ color: "#64748b", fontSize: "0.875rem" }}>
                       Last opened: {formatRelativeTime(project.lastAccessedAt)}
@@ -544,6 +587,22 @@ export const ProjectLauncher: React.FC<ProjectLauncherProps> = ({
                       Created: {formatDate(project.createdAt)}
                     </span>
                   </div>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteProject(project.id);
+                    }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#94a3b8',
+                      fontSize: '1.25rem',
+                      cursor: 'pointer',
+                      padding: '0.5rem',
+                    }}
+                  >
+                    &times;
+                  </button>
                 </div>
               ))}
             </div>

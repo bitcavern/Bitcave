@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
+import { FileExplorer } from './FileExplorer';
 
 interface LeftSidebarProps {
   isVisible: boolean;
@@ -20,6 +21,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
   const [currentUrl, setCurrentUrl] = useState("https://www.google.com");
   const [urlInput, setUrlInput] = useState(currentUrl);
   const [isLoading, setIsLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState('browser');
 
   // Handle resize
   useEffect(() => {
@@ -112,6 +114,28 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
     console.log("Forward clicked - history navigation to be implemented");
   };
 
+  const tabStyle = {
+    inactive: {
+      background: 'none',
+      border: 'none',
+      color: '#9ca3af',
+      padding: '0.5rem 1rem',
+      cursor: 'pointer',
+      fontSize: '14px',
+      fontWeight: '500',
+    },
+    active: {
+      background: '#374151',
+      border: 'none',
+      color: '#f3f4f6',
+      padding: '0.5rem 1rem',
+      cursor: 'pointer',
+      fontSize: '14px',
+      fontWeight: '600',
+      borderRadius: '4px',
+    }
+  }
+
   return (
     <>
       {/* Toggle Button */}
@@ -181,30 +205,26 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
             background: "#111827",
           }}
         >
-          <h3
-            style={{
-              margin: 0,
-              color: "#f3f4f6",
-              fontSize: "14px",
-              fontWeight: "600",
-            }}
-          >
-            Web Browser
-          </h3>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button onClick={() => setActiveTab('browser')} style={activeTab === 'browser' ? tabStyle.active : tabStyle.inactive}>Web Browser</button>
+            <button onClick={() => setActiveTab('files')} style={activeTab === 'files' ? tabStyle.active : tabStyle.inactive}>File Explorer</button>
+          </div>
         </div>
 
-        {/* Navigation Bar */}
-        <div
-          style={{
-            padding: "8px",
-            borderBottom: "1px solid #374151",
-            borderRight: "1px solid #374151", // Continue the border
-            display: "flex",
-            alignItems: "center",
-            gap: "8px",
-            background: "#111827",
-          }}
-        >
+        {activeTab === 'browser' && (
+          <>
+            {/* Navigation Bar */}
+            <div
+              style={{
+                padding: "8px",
+                borderBottom: "1px solid #374151",
+                borderRight: "1px solid #374151", // Continue the border
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                background: "#111827",
+              }}
+            >
           <button
             onClick={handleBack}
             style={{
@@ -385,6 +405,9 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
             </div>
           )}
         </div>
+      </>
+    )}
+    {activeTab === 'files' && <FileExplorer />}
 
         {/* Resize Handle */}
         <div

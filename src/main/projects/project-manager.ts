@@ -308,9 +308,21 @@ export class ProjectManager extends EventEmitter {
   }
 
   // Utility methods
-  getProjectPath(): string | null {
+  async getProjectPath(): Promise<string | null> {
     if (!this.currentProject) return null;
-    return this.storageService.getProjectAssetsPath(this.currentProject.id);
+    const project = await this.storageService.getProject(this.currentProject.id);
+    if (!project) return null;
+    return this.storageService.getProjectPath(this.currentProject.id, project.folderPath, project.name);
+  }
+
+  async getProjectRoot(): Promise<string | null> {
+    if (!this.currentProject) return null;
+    const project = await this.storageService.getProject(this.currentProject.id);
+    if (!project) return null;
+    if (project.folderPath) {
+      return project.folderPath;
+    }
+    return this.storageService.getDefaultProjectPath(project.name);
   }
 
   getStorageService(): ProjectStorageService {

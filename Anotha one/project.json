@@ -1,0 +1,44 @@
+{
+  "id": "83b2a7c6-0cfa-4aca-a03b-6f9a31178210",
+  "name": "Anotha one",
+  "description": "",
+  "createdAt": "2025-09-01T20:07:37.254Z",
+  "updatedAt": "2025-09-02T09:02:01.325Z",
+  "lastAccessedAt": "2025-09-01T20:07:37.261Z",
+  "settings": {
+    "canvas": {
+      "defaultZoom": 1,
+      "gridEnabled": true,
+      "snapToGrid": false,
+      "gridSize": 20,
+      "backgroundColor": "#111827",
+      "showMinimap": false
+    },
+    "ai": {
+      "defaultModel": "auto",
+      "temperature": 0.7,
+      "maxTokens": 1000,
+      "enableMemory": true,
+      "contextWindow": 4000
+    },
+    "preferences": {
+      "theme": "dark",
+      "autoSave": true,
+      "autoSaveInterval": 30,
+      "confirmDelete": true,
+      "showNotifications": true
+    },
+    "features": {
+      "enableArtifacts": true,
+      "enableMemory": true,
+      "enableCollaboration": false,
+      "betaFeatures": false
+    }
+  },
+  "metadata": {
+    "windowCount": 0,
+    "artifactCount": 0,
+    "conversationCount": 0,
+    "tags": []
+  }
+}

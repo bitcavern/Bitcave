@@ -1,0 +1,95 @@
+{
+  "canvas": {
+    "viewport": {
+      "x": 0,
+      "y": 0,
+      "zoom": 1
+    },
+    "dimensions": {
+      "width": 2000,
+      "height": 2000
+    }
+  },
+  "windows": [
+    {
+      "id": "416de731-dad5-4946-9577-c3107bf16579",
+      "type": "text",
+      "title": "Text Window",
+      "position": {
+        "x": 660,
+        "y": 60
+      },
+      "size": {
+        "width": 500,
+        "height": 400
+      },
+      "zIndex": 1,
+      "isLocked": false,
+      "isMinimized": false,
+      "metadata": {
+        "windowConfig": {
+          "defaultSize": {
+            "width": 500,
+            "height": 400
+          },
+          "minSize": {
+            "width": 300,
+            "height": 200
+          },
+          "resizable": true,
+          "icon": "📄",
+          "name": "Text"
+        },
+        "text": ""
+      },
+      "content": {
+        "text": ""
+      }
+    },
+    {
+      "id": "d7962546-ab73-4e15-927e-d269f6fc0301",
+      "type": "code-execution",
+      "title": "Calculate factorial of 8",
+      "position": {
+        "x": 40,
+        "y": 60
+      },
+      "size": {
+        "width": 600,
+        "height": 460
+      },
+      "zIndex": 2,
+      "isLocked": false,
+      "isMinimized": false,
+      "metadata": {
+        "label": "Calculate factorial of 8",
+        "code": "import math\nresult = math.factorial(8)\nprint(f\"8! = {result}\")",
+        "language": "python",
+        "executionId": "inline_1756756582162_7muliru2l",
+        "windowConfig": {
+          "defaultSize": {
+            "width": 800,
+            "height": 600
+          },
+          "minSize": {
+            "width": 500,
+            "height": 450
+          },
+          "resizable": true,
+          "icon": "⚡",
+          "name": "Code"
+        },
+        "history": []
+      },
+      "content": {
+        "code": "import math\nresult = math.factorial(8)\nprint(f\"8! = {result}\")",
+        "language": "python",
+        "history": []
+      }
+    }
+  ],
+  "artifacts": [],
+  "conversations": [],
+  "version": "1.0.0",
+  "timestamp": "2025-09-01T20:07:37.258Z"
+}

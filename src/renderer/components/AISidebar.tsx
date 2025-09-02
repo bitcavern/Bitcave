@@ -62,13 +62,11 @@ const MessageWithHover: React.FC<MessageWithHoverProps> = ({
       style={{
         position: "relative",
         width: "100%",
-        paddingBottom: "40px", // Extra space for the button area
-        marginBottom: "8px", // Extra margin to ensure hover area
       }}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >
-      <div style={{ overflowX: "auto" }}>
+      <div style={{ overflowX: "auto", paddingBottom: '16px' }}>
         {renderFormattedMessage(message.content)}
       </div>
       
