@@ -9,7 +9,7 @@ export class ProjectStorageService {
   private configPath: string;
 
   constructor() {
-    this.basePath = path.join(os.homedir(), 'Documents', 'Bitcave');
+    this.basePath = path.join(os.homedir(), 'Documents', 'Bitcave Projects');
     this.projectsPath = this.basePath;
     this.configPath = path.join(os.homedir(), '.bitcave', 'config');
   }

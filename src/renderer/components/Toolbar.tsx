@@ -1,10 +1,20 @@
 import React, { useState } from "react";
+import { getIconForWindowType } from "./IconMap";
+import {
+  Plus,
+  ChevronDown,
+  Library,
+  Settings,
+  LayoutGrid,
+  Globe,
+} from "lucide-react";
 import type { CanvasState, WindowType, BaseWindow } from "@/shared/types";
 import { WINDOW_CONFIGS } from "@/shared/constants";
 import { GlobalArtifactsModal } from "./GlobalArtifactsModal";
 
 interface ToolbarProps {
   onCreateWindow: (type: WindowType) => void;
+  onSettingsClick: () => void; // Added for settings modal
   selectedWindowId: string | null;
   windowCount: number;
   canvasState: CanvasState;
@@ -19,9 +29,10 @@ interface ToolbarProps {
 
 export const Toolbar: React.FC<ToolbarProps> = ({
   onCreateWindow,
+  onSettingsClick, // Added for settings modal
   selectedWindowId,
-  windowCount,
-  canvasState,
+  windowCount: _windowCount,
+  canvasState: _canvasState,
   windows,
   onRestoreWindow,
   snapToGrid = false,
@@ -63,13 +74,9 @@ export const Toolbar: React.FC<ToolbarProps> = ({
     { type: "webview", label: "Webview" },
     { type: "reference-webview", label: "Reference" },
     { type: "markdown-editor", label: "Markdown" },
-    { type: "graph", label: "Graph" },
     { type: "chat", label: "Bit Chat" },
     { type: "code-execution", label: "Code" },
     { type: "artifact", label: "Artifact" },
-    { type: "file-explorer", label: "Files" },
-    { type: "terminal", label: "Terminal" },
-    { type: "memory", label: "Memory" },
   ];
 
   return (
@@ -116,16 +123,15 @@ export const Toolbar: React.FC<ToolbarProps> = ({
               e.currentTarget.style.backgroundColor = "#3b82f6";
             }}
           >
-            <span>+</span>
+            <Plus size={16} strokeWidth={2.5} />
             <span>Add Window</span>
-            <span
+            <ChevronDown
+              size={16}
               style={{
                 transform: isExpanded ? "rotate(180deg)" : "rotate(0deg)",
                 transition: "transform 0.2s",
               }}
-            >
-              ▼
-            </span>
+            />
           </button>
 
           {/* Window type dropdown */}
@@ -146,7 +152,6 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             >
               <div style={{ padding: "8px 0" }}>
                 {windowTypes.map(({ type, label }) => {
-                  const config = WINDOW_CONFIGS[type];
                   return (
                     <button
                       key={type}
@@ -175,7 +180,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                         e.currentTarget.style.backgroundColor = "transparent";
                       }}
                     >
-                      <span style={{ fontSize: "16px" }}>{config.icon}</span>
+                      <span style={{ fontSize: "16px" }}>{getIconForWindowType(type)}</span>
                       <span>{label}</span>
                     </button>
                   );
@@ -185,7 +190,6 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           )}
         </div>
 
-        {/* Separator */}
         <div
           style={{
             width: "1px",
@@ -194,7 +198,6 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           }}
         />
 
-        {/* Status Info */}
         <div
           style={{
             display: "flex",
@@ -232,17 +235,15 @@ export const Toolbar: React.FC<ToolbarProps> = ({
               <span>
                 Windows {openWindows.length}/{totalWindows}
               </span>
-              <span
+              <ChevronDown
+                size={16}
                 style={{
                   transform: showMinimized ? "rotate(180deg)" : "rotate(0deg)",
                   transition: "transform 0.2s",
                 }}
-              >
-                ▼
-              </span>
+              />
             </button>
 
-            {/* Unified windows dropdown */}
             {showMinimized && (
               <div
                 style={{
@@ -276,7 +277,6 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                     </div>
                     <div style={{ padding: "4px 0" }}>
                       {minimizedWindows.map((window) => {
-                        const config = WINDOW_CONFIGS[window.type];
                         return (
                           <button
                             key={window.id}
@@ -309,7 +309,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                             }}
                           >
                             <span style={{ fontSize: "14px", opacity: 0.6 }}>
-                              {config.icon}
+                              {getIconForWindowType(window.type)}
                             </span>
                             <div
                               style={{
@@ -324,7 +324,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                               <span
                                 style={{ fontSize: "11px", color: "#9ca3af" }}
                               >
-                                {config.name}
+                                {WINDOW_CONFIGS[window.type].name}
                               </span>
                             </div>
                           </button>
@@ -364,13 +364,11 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                     </div>
                     <div style={{ padding: "4px 0" }}>
                       {openWindows.map((window) => {
-                        const config = WINDOW_CONFIGS[window.type];
                         const isSelected = selectedWindowId === window.id;
                         return (
                           <button
                             key={window.id}
                             onClick={() => {
-                              // TODO: Add smooth animation to center on window
                               setShowMinimized(false);
                             }}
                             style={{
@@ -403,7 +401,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                             }}
                           >
                             <span style={{ fontSize: "14px" }}>
-                              {config.icon}
+                              {getIconForWindowType(window.type)}
                             </span>
                             <div
                               style={{
@@ -418,7 +416,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                               <span
                                 style={{ fontSize: "11px", color: "#9ca3af" }}
                               >
-                                {config.name}
+                                {WINDOW_CONFIGS[window.type].name}
                               </span>
                             </div>
                           </button>
@@ -430,12 +428,21 @@ export const Toolbar: React.FC<ToolbarProps> = ({
               </div>
             )}
           </div>
-          {selectedWindow && (
-            <span style={{ color: "#3b82f6", fontWeight: "500" }}>
-              Selected: {getWindowLabel(selectedWindow)}
-            </span>
-          )}
         </div>
+
+        <div
+          style={{
+            width: "1px",
+            height: "24px",
+            backgroundColor: "#4b5563",
+          }}
+        />
+
+        {selectedWindow && (
+          <span style={{ color: "#3b82f6", fontWeight: "500" }}>
+            Selected: {getWindowLabel(selectedWindow)}
+          </span>
+        )}
 
         {/* Left Sidebar Toggle */}
         {onToggleLeftSidebar && (
@@ -463,7 +470,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             }}
             title={leftSidebarVisible ? "Hide webview sidebar" : "Show webview sidebar"}
           >
-            <span style={{ fontSize: "14px" }}>🌐</span>
+            <Globe size={14} />
             <span>Browser</span>
           </button>
         )}
@@ -494,7 +501,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             }}
             title={snapToGrid ? "Disable grid snapping" : "Enable grid snapping"}
           >
-            <span style={{ fontSize: "14px" }}>⊞</span>
+            <LayoutGrid size={14} />
             <span>{snapToGrid ? "Grid ON" : "Grid OFF"}</span>
           </button>
         )}
@@ -524,8 +531,37 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           }}
           title="Browse and import global artifacts"
         >
-          <span style={{ fontSize: "14px" }}>📚</span>
+          <Library size={14} />
           <span>Library</span>
+        </button>
+
+        {/* Settings Button */}
+        <button
+          onClick={onSettingsClick}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "6px",
+            padding: "6px 10px",
+            backgroundColor: "#374151",
+            color: "white",
+            border: "none",
+            borderRadius: "6px",
+            cursor: "pointer",
+            fontSize: "12px",
+            fontWeight: "500",
+            transition: "all 0.2s",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = "#4b5563";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = "#374151";
+          }}
+          title="Open user settings"
+        >
+          <Settings size={14} />
+          <span>Settings</span>
         </button>
 
         {/* Bit Status Indicator */}

@@ -8,7 +8,8 @@ import { WINDOW_CONFIGS, APP_CONFIG } from "@/shared/constants";
 import CodeExecutionWindow from "../windows/CodeExecutionWindow";
 import { WebviewWindow } from "../windows/WebviewWindow";
 import { ArtifactWindow } from "../windows/ArtifactWindow";
-import { GlobalArtifactsModal } from "./GlobalArtifactsModal";
+import { getIconForWindowType } from "./IconMap";
+import { Lock } from 'lucide-react';
 
 interface WindowRendererProps {
   window: BaseWindow;
@@ -340,7 +341,7 @@ export const WindowRenderer: React.FC<WindowRendererProps> = ({
             minWidth: 0,
           }}
         >
-          <span style={{ fontSize: "16px" }}>{windowConfig.icon}</span>
+                    <span style={{ fontSize: "16px" }}>{getIconForWindowType(window.type)}</span>
           {isEditingTitle ? (
             <input
               ref={titleInputRef}
@@ -394,9 +395,7 @@ export const WindowRenderer: React.FC<WindowRendererProps> = ({
               {window.title}
             </span>
           )}
-          {window.isLocked && (
-            <span style={{ fontSize: "12px", color: "#9ca3af" }}>🔒</span>
-          )}
+          {window.isLocked && <Lock size={12} />}
         </div>
 
         <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Sparkles } from 'lucide-react';
 import type { ProjectInfo } from '@/main/projects/types';
 
 interface ProjectModalProps {
@@ -208,7 +209,10 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
                     fontWeight: '600',
                     cursor: 'pointer',
                     boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)',
-                    transition: 'all 0.2s ease'
+                    transition: 'all 0.2s ease',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
                   }}
                   onMouseEnter={(e) => {
                     e.currentTarget.style.transform = 'translateY(-1px)';
@@ -219,7 +223,8 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
                     e.currentTarget.style.boxShadow = '0 4px 12px rgba(59, 130, 246, 0.3)';
                   }}
                 >
-                  ✨ New Project
+                  <Sparkles size={16} />
+                  <span>New Project</span>
                 </button>
               </div>
 

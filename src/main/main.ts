@@ -8,10 +8,15 @@ import { AIService } from "./ai/ai-service";
 import { WebviewManager } from "./webview-manager";
 import { ProjectManager } from "./projects/project-manager";
 import { ArtifactManager } from "./artifacts/artifact-manager";
+import { UserManager } from "./user/user-manager";
+import type {
+  IPCEventName,
+  IPCEventData,
+  UserSettings,
+} from "@/shared/types";
 
 // Load environment variables
 dotenv.config();
-import type { IPCEventName, IPCEventData } from "@/shared/types";
 
 class BitcaveApp {
   private mainWindow: BrowserWindow | null = null;
@@ -20,6 +25,7 @@ class BitcaveApp {
   private aiService: AIService;
   private webviewManager: WebviewManager;
   private projectManager: ProjectManager;
+  private userManager: UserManager;
   private artifactManager: ArtifactManager | null = null;
   private selectedWindowId: string | null = null;
 
@@ -29,6 +35,7 @@ class BitcaveApp {
     this.aiService = new AIService(this.aiToolRegistry, this.windowManager);
     this.webviewManager = new WebviewManager();
     this.projectManager = new ProjectManager();
+    this.userManager = new UserManager();
 
     // Initialize with environment API key if available
     const envApiKey = process.env.OPENROUTER_API_KEY;
@@ -40,11 +47,11 @@ class BitcaveApp {
 
   public async initialize(): Promise<void> {
     await app.whenReady();
-    
+
     // Initialize project manager first
     await this.projectManager.initialize();
     this.projectManager.setWindowManager(this.windowManager);
-    
+
     this.createMainWindow();
     this.setupIPCHandlers();
     await this.setupHotReload();
@@ -190,6 +197,28 @@ class BitcaveApp {
   }
 
   private setupIPCHandlers(): void {
+    // User settings handlers
+    ipcMain.handle("user:get-settings", async () => {
+      try {
+        const settings = await this.userManager.getUserSettings();
+        return { success: true, data: settings };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    });
+
+    ipcMain.handle(
+      "user:save-settings",
+      async (event, settings: UserSettings) => {
+        try {
+          await this.userManager.saveUserSettings(settings);
+          return { success: true };
+        } catch (error) {
+          return { success: false, error: (error as Error).message };
+        }
+      }
+    );
+
     // Window management handlers
     ipcMain.handle(
       "window:create",
@@ -378,7 +407,7 @@ class BitcaveApp {
       async (event, conversationId: string) => {
         try {
           const conversations = this.aiService.getConversations();
-          const conversation = conversations.find(c => c.id === conversationId);
+          const conversation = conversations.find((c) => c.id === conversationId);
           return { success: true, data: conversation };
         } catch (error) {
           return { success: false, error: (error as Error).message };
@@ -398,17 +427,14 @@ class BitcaveApp {
       }
     );
 
-    ipcMain.handle(
-      "ai:new-conversation", 
-      async () => {
-        try {
-          const newConversationId = this.aiService.createNewConversation();
-          return { success: true, data: newConversationId };
-        } catch (error) {
-          return { success: false, error: (error as Error).message };
-        }
+    ipcMain.handle("ai:new-conversation", async () => {
+      try {
+        const newConversationId = this.aiService.createNewConversation();
+        return { success: true, data: newConversationId };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
       }
-    );
+    });
 
     // Project management handlers
     ipcMain.handle("projects:list", async () => {
@@ -435,7 +461,7 @@ class BitcaveApp {
         const projects = await this.projectManager.getRecentProjects();
         return projects;
       } catch (error) {
-        console.error('Failed to get recent projects:', error);
+        console.error("Failed to get recent projects:", error);
         return [];
       }
     });
@@ -458,39 +484,48 @@ class BitcaveApp {
       }
     });
 
-    ipcMain.handle("projects:open", async (event, data: { projectId: string }) => {
-      try {
-        await this.projectManager.openProject(data.projectId);
-        
-        // Initialize artifact manager for the opened project
-        const project = this.projectManager.getCurrentProject();
-        if (project) {
-          const projectPath = await this.projectManager.getProjectPath();
-          if (projectPath) {
-            this.artifactManager = new ArtifactManager(projectPath);
-            await this.artifactManager.loadExistingArtifacts();
-            
-            // Set artifact manager in AI tools registry
-            this.aiToolRegistry.setArtifactManager(this.artifactManager);
-            
-            console.log('[Main] Artifact manager initialized for project:', project.name);
-          }
-        }
-        
-        return { success: true };
-      } catch (error) {
-        return { success: false, error: (error as Error).message };
-      }
-    });
+    ipcMain.handle(
+      "projects:open",
+      async (event, data: { projectId: string }) => {
+        try {
+          await this.projectManager.openProject(data.projectId);
 
-    ipcMain.handle("projects:close", async (event, data: { save?: boolean } = {}) => {
-      try {
-        await this.projectManager.closeProject(data.save ?? true);
-        return { success: true };
-      } catch (error) {
-        return { success: false, error: (error as Error).message };
+          // Initialize artifact manager for the opened project
+          const project = this.projectManager.getCurrentProject();
+          if (project) {
+            const projectPath = await this.projectManager.getProjectPath();
+            if (projectPath) {
+              this.artifactManager = new ArtifactManager(projectPath);
+              await this.artifactManager.loadExistingArtifacts();
+
+              // Set artifact manager in AI tools registry
+              this.aiToolRegistry.setArtifactManager(this.artifactManager);
+
+              console.log(
+                "[Main] Artifact manager initialized for project:",
+                project.name
+              );
+            }
+          }
+
+          return { success: true };
+        } catch (error) {
+          return { success: false, error: (error as Error).message };
+        }
       }
-    });
+    );
+
+    ipcMain.handle(
+      "projects:close",
+      async (event, data: { save?: boolean } = {}) => {
+        try {
+          await this.projectManager.closeProject(data.save ?? true);
+          return { success: true };
+        } catch (error) {
+          return { success: false, error: (error as Error).message };
+        }
+      }
+    );
 
     ipcMain.handle("projects:save", async () => {
       try {
@@ -513,15 +548,15 @@ class BitcaveApp {
     // Dialog handlers
     ipcMain.handle("dialog:select-folder", async () => {
       if (!this.mainWindow) return null;
-      
+
       try {
         const result = await dialog.showOpenDialog(this.mainWindow, {
-          properties: ['openDirectory', 'createDirectory'],
-          title: 'Select Project Folder'
+          properties: ["openDirectory", "createDirectory"],
+          title: "Select Project Folder",
         });
         return result;
       } catch (error) {
-        console.error('Failed to show folder dialog:', error);
+        console.error("Failed to show folder dialog:", error);
         return { canceled: true, filePaths: [] };
       }
     });
@@ -534,32 +569,36 @@ class BitcaveApp {
         }
 
         const readDir = async (dir: string): Promise<any[]> => {
-          const entries = await require('fs/promises').readdir(dir, { withFileTypes: true });
-          const files = await Promise.all(entries.map(async (entry: fs.Dirent) => {
-            if (entry.name.startsWith('.')) {
-              return null;
-            }
-            const fullPath = require('path').join(dir, entry.name);
-            if (entry.isDirectory()) {
-              if (entry.name === '.bitcave') {
+          const entries = await require("fs/promises").readdir(dir, {
+            withFileTypes: true,
+          });
+          const files = await Promise.all(
+            entries.map(async (entry: fs.Dirent) => {
+              if (entry.name.startsWith(".")) {
                 return null;
               }
-              return {
-                name: entry.name,
-                path: fullPath,
-                isDirectory: true,
-                children: await readDir(fullPath)
-              };
-            } else {
-              return {
-                name: entry.name,
-                path: fullPath,
-                isDirectory: false
-              };
-            }
-          }));
-          return files.filter(file => file !== null);
-        }
+              const fullPath = require("path").join(dir, entry.name);
+              if (entry.isDirectory()) {
+                if (entry.name === ".bitcave") {
+                  return null;
+                }
+                return {
+                  name: entry.name,
+                  path: fullPath,
+                  isDirectory: true,
+                  children: await readDir(fullPath),
+                };
+              } else {
+                return {
+                  name: entry.name,
+                  path: fullPath,
+                  isDirectory: false,
+                };
+              }
+            })
+          );
+          return files.filter((file) => file !== null);
+        };
 
         const files = await readDir(projectRoot);
         return { success: true, data: files };
@@ -788,13 +827,16 @@ class BitcaveApp {
 
     // Global artifact management handlers
     ipcMain.handle(
-      "artifact:save-globally", 
+      "artifact:save-globally",
       async (event, data: { artifactId: string; name?: string }) => {
         try {
           if (!this.artifactManager) {
             throw new Error("Artifact manager not initialized - no project open");
           }
-          await this.artifactManager.saveArtifactGlobally(data.artifactId, data.name);
+          await this.artifactManager.saveArtifactGlobally(
+            data.artifactId,
+            data.name
+          );
           return { success: true };
         } catch (error) {
           return { success: false, error: (error as Error).message };
@@ -821,7 +863,9 @@ class BitcaveApp {
           if (!this.artifactManager) {
             throw new Error("Artifact manager not initialized - no project open");
           }
-          const artifact = await this.artifactManager.importGlobalArtifact(data.globalArtifactId);
+          const artifact = await this.artifactManager.importGlobalArtifact(
+            data.globalArtifactId
+          );
           return { success: true, data: artifact };
         } catch (error) {
           return { success: false, error: (error as Error).message };

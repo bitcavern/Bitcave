@@ -6,6 +6,7 @@ import { AISidebar } from "./components/AISidebar";
 import { LeftSidebar } from "./components/LeftSidebar";
 import { ProjectLauncher } from "./components/ProjectLauncher";
 import { ProjectIndicator } from "./components/ProjectIndicator";
+import { SettingsModal } from "./components/SettingsModal"; // Added for settings
 import type {
   BaseWindow,
   CanvasState,
@@ -34,6 +35,7 @@ export const App: React.FC = () => {
   const [snapToGridEnabled, setSnapToGridEnabled] = useState<boolean>(APP_CONFIG.grid.snapEnabled);
   const [leftSidebarVisible, setLeftSidebarVisible] = useState(false);
   const [leftSidebarWidth, setLeftSidebarWidth] = useState(400);
+  const [isSettingsModalOpen, setSettingsModalOpen] = useState(false); // Added for settings
 
   // Code execution function
   const executeCode = async (
@@ -442,6 +444,7 @@ export const App: React.FC = () => {
         leftSidebarVisible={leftSidebarVisible}
         onToggleLeftSidebar={() => setLeftSidebarVisible(!leftSidebarVisible)}
         leftSidebarWidth={leftSidebarWidth}
+        onSettingsClick={() => setSettingsModalOpen(true)} // Added for settings
       />
 
       <LeftSidebar
@@ -488,6 +491,13 @@ export const App: React.FC = () => {
           </div>
         ))}
       </div>
+
+      {/* Settings Modal */}
+      <SettingsModal 
+        isOpen={isSettingsModalOpen} 
+        onClose={() => setSettingsModalOpen(false)} 
+      />
+
     </div>
   );
 };

@@ -10,9 +10,51 @@
       "height": 2000
     }
   },
-  "windows": [],
+  "windows": [
+    {
+      "id": "5b256931-f238-4532-873d-7a7f59b8ee33",
+      "type": "code-execution",
+      "title": "Calculate factorial of 5",
+      "position": {
+        "x": 160,
+        "y": 160
+      },
+      "size": {
+        "width": 600,
+        "height": 620
+      },
+      "zIndex": 1,
+      "isLocked": false,
+      "isMinimized": false,
+      "metadata": {
+        "label": "Calculate factorial of 5",
+        "code": "import math\nresult = math.factorial(5)\nprint(f\"5! = {result}\")",
+        "language": "python",
+        "executionId": "inline_1756812063711_ex42mkoim",
+        "windowConfig": {
+          "defaultSize": {
+            "width": 800,
+            "height": 600
+          },
+          "minSize": {
+            "width": 500,
+            "height": 450
+          },
+          "resizable": true,
+          "icon": "⚡",
+          "name": "Code"
+        },
+        "history": []
+      },
+      "content": {
+        "code": "import math\nresult = math.factorial(5)\nprint(f\"5! = {result}\")",
+        "language": "python",
+        "history": []
+      }
+    }
+  ],
   "artifacts": [],
   "conversations": [],
   "version": "1.0.0",
-  "timestamp": "2025-09-02T09:02:01.322Z"
+  "timestamp": "2025-09-02T13:38:06.173Z"
 }

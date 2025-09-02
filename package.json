@@ -35,6 +35,7 @@
     "cheerio": "^1.1.2",
     "dotenv": "^17.2.1",
     "global": "^4.4.0",
+    "lucide-react": "^0.542.0",
     "node-pty": "^1.0.0",
     "path-browserify": "1.0.1",
     "react": "^19.1.1",

@@ -147,6 +147,12 @@ export interface ProjectSettings {
   fileWatchEnabled: boolean;
 }
 
+export interface UserSettings {
+  name: string;
+  interests: string[];
+  aiPersonality: "efficient" | "explanatory" | "funny" | "robotic";
+}
+
 export interface FileReference {
   projectId: string;
   filePath: string;
@@ -219,6 +225,10 @@ export interface AppState {
 
 // Event types for IPC communication
 export interface IPCEvents {
+  // User settings
+  "user:get-settings": Record<string, never>;
+  "user:save-settings": UserSettings;
+
   // Window management
   "window:create": { type: WindowType; config: Partial<BaseWindow> };
   "window:delete": { windowId: string };
