@@ -71,7 +71,8 @@ class BitcaveApp {
         webviewTag: true, // Enable webview tags
         preload: path.join(__dirname, "preload.js"),
       },
-      titleBarStyle: "hiddenInset",
+      titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "hidden",
+      frame: process.platform === "win32" ? false : true,
       show: false, // Don't show until ready
     });
 
@@ -568,20 +569,35 @@ class BitcaveApp {
           return { success: true, data: [] };
         }
 
+        // List of internal Bitcave files and folders to hide from file explorer
+        const isInternalBitcaveFile = (name: string): boolean => {
+          const hiddenFiles = [
+            'project.json',
+            'workspace.json',
+          ];
+          const hiddenFolders = [
+            'artifacts',
+            'memory', 
+            'ai-conversations',
+            'assets',
+            '.bitcave'
+          ];
+          
+          return hiddenFiles.includes(name) || hiddenFolders.includes(name);
+        };
+
         const readDir = async (dir: string): Promise<any[]> => {
           const entries = await require("fs/promises").readdir(dir, {
             withFileTypes: true,
           });
           const files = await Promise.all(
             entries.map(async (entry: fs.Dirent) => {
-              if (entry.name.startsWith(".")) {
+              // Hide files/folders starting with "." or internal Bitcave files
+              if (entry.name.startsWith(".") || isInternalBitcaveFile(entry.name)) {
                 return null;
               }
               const fullPath = require("path").join(dir, entry.name);
               if (entry.isDirectory()) {
-                if (entry.name === ".bitcave") {
-                  return null;
-                }
                 return {
                   name: entry.name,
                   path: fullPath,
@@ -602,6 +618,61 @@ class BitcaveApp {
 
         const files = await readDir(projectRoot);
         return { success: true, data: files };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    });
+
+    ipcMain.handle("files:read", async (event, filePath: string) => {
+      try {
+        const projectRoot = await this.projectManager.getProjectRoot();
+        if (!projectRoot) {
+          return { success: false, error: "No project is currently open" };
+        }
+
+        // Ensure the file is within the project directory for security
+        const path = require("path");
+        const fs = require("fs/promises");
+        const resolvedFilePath = path.resolve(filePath);
+        const resolvedProjectRoot = path.resolve(projectRoot);
+        
+        if (!resolvedFilePath.startsWith(resolvedProjectRoot)) {
+          return { success: false, error: "File is outside project directory" };
+        }
+
+        // Check if file exists
+        const stats = await fs.stat(resolvedFilePath);
+        if (!stats.isFile()) {
+          return { success: false, error: "Path is not a file" };
+        }
+
+        // Read file content (only for text files, limit file size)
+        const MAX_FILE_SIZE = 1024 * 1024; // 1MB limit
+        if (stats.size > MAX_FILE_SIZE) {
+          return { success: false, error: "File too large (max 1MB)" };
+        }
+
+        // Check file extension for text formats
+        const textExtensions = ['.txt', '.md', '.json', '.js', '.ts', '.jsx', '.tsx', '.py', '.html', '.css', '.xml', '.yaml', '.yml', '.csv', '.log'];
+        const fileExt = path.extname(resolvedFilePath).toLowerCase();
+        
+        if (!textExtensions.includes(fileExt)) {
+          return { success: false, error: `Unsupported file type: ${fileExt}` };
+        }
+
+        const content = await fs.readFile(resolvedFilePath, 'utf-8');
+        const relativePath = path.relative(projectRoot, resolvedFilePath);
+        
+        return { 
+          success: true, 
+          data: {
+            content,
+            fileName: path.basename(resolvedFilePath),
+            relativePath,
+            size: stats.size,
+            extension: fileExt
+          }
+        };
       } catch (error) {
         return { success: false, error: (error as Error).message };
       }

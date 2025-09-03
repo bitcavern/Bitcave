@@ -217,6 +217,19 @@ export const ProjectLauncher: React.FC<ProjectLauncherProps> = ({
   if (isLoading) {
     return (
       <div style={containerStyle}>
+        {/* Window Drag Region */}
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            height: "30px",
+            zIndex: 9999,
+            // @ts-ignore - WebkitAppRegion is a valid CSS property for Electron
+            WebkitAppRegion: "drag",
+          }}
+        />
         <div style={{ textAlign: "center" }}>
           <div style={{
             width: "40px",
@@ -236,6 +249,19 @@ export const ProjectLauncher: React.FC<ProjectLauncherProps> = ({
   if (showCreateProject) {
     return (
       <div style={containerStyle}>
+        {/* Window Drag Region */}
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            height: "30px",
+            zIndex: 9999,
+            // @ts-ignore - WebkitAppRegion is a valid CSS property for Electron
+            WebkitAppRegion: "drag",
+          }}
+        />
         <div style={contentStyle}>
           <div style={headerStyle}>
             <h1 style={titleStyle}>Create New Project</h1>
@@ -411,6 +437,19 @@ export const ProjectLauncher: React.FC<ProjectLauncherProps> = ({
 
   return (
     <div style={containerStyle}>
+      {/* Window Drag Region */}
+      <div
+        style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          right: 0,
+          height: "30px",
+          zIndex: 9999,
+          // @ts-ignore - WebkitAppRegion is a valid CSS property for Electron
+          WebkitAppRegion: "drag",
+        }}
+      />
       <div style={contentStyle}>
         <div style={headerStyle}>
           <h1 style={titleStyle}>Welcome to Bitcave</h1>

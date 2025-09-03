@@ -26,6 +26,21 @@
       * {
         box-sizing: border-box;
       }
+
+      /* Default: no dragging for most elements */
+      body, span, button, input, textarea, select, a {
+        -webkit-app-region: no-drag;
+      }
+      
+      /* Allow dragging for elements that explicitly set it */
+      [style*="drag"], .window-drag, [style*="WebkitAppRegion"] {
+        -webkit-app-region: drag !important;
+      }
+      
+      /* Ensure interactive elements are not draggable */
+      button, input, textarea, select, a, [role="button"], [tabindex] {
+        -webkit-app-region: no-drag !important;
+      }
     </style>
   </head>
   <body>

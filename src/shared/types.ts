@@ -195,12 +195,21 @@ export interface InlineExecution {
   };
 }
 
+export interface FileReference {
+  fileName: string;
+  relativePath: string;
+  content: string;
+  size: number;
+  extension: string;
+}
+
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant" | "system";
   content: string;
   timestamp: Date;
   inlineExecution?: InlineExecution;
+  fileReferences?: FileReference[];
 }
 
 // AI Provider types

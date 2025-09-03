@@ -33,7 +33,7 @@
   > This is a broad goal. Could you provide a few specific examples of areas in the app that you feel need the most "prettification"? For instance, are there specific components, windows, or color schemes you'd like to see improved first?
   > ANSWER: Ignore for now, I will come back to this one.
 
-- Need a clean icon library to replace emojis.
+- Need a clean icon library to replace emojis. - DONE
 
   > Do you have a preferred icon library (e.g., Material Icons, Feather Icons, Font Awesome) or a particular visual style (e.g., line art, filled, two-tone) you'd like to use?
   > ANSWER: Line art, I think it's fitting with the general vibe we have here (grid-lines, blueprint like canvas, monospace fonts, etc)
@@ -77,6 +77,6 @@
 
 - We need an image viewer and pdf viewer that can view local files.
 
-- The file explorer needs to have expandable tree-like folders. All internal files should be hidden, the only thing visible should be documents added by the user to the project folder.
+- The file explorer needs to have expandable tree-like folders. All internal files should be hidden, the only thing visible should be documents added by the user to the project folder. - DONE
 
 - Let's properly theme scroll bars (and have them auto-hide)

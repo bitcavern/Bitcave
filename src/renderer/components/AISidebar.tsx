@@ -1,7 +1,9 @@
 import React, { useState, useRef, useEffect } from "react";
 import type { ReactNode } from "react";
-import type { BaseWindow, ChatMessage, InlineExecution } from "@/shared/types";
+import type { BaseWindow, ChatMessage, InlineExecution, FileReference } from "@/shared/types";
 import { InlineExecution as InlineExecutionComponent } from "./InlineExecution";
+import { FilePicker } from "./FilePicker";
+import { Paperclip, X, File } from "lucide-react";
 
 // Component for messages with hover functionality
 interface MessageWithHoverProps {
@@ -482,8 +484,14 @@ export const AISidebar: React.FC<AISidebarProps> = ({
   const [sidebarWidth, setSidebarWidth] = useState(380);
   const [abortController, setAbortController] =
     useState<AbortController | null>(null);
+  const [attachedFiles, setAttachedFiles] = useState<FileReference[]>([]);
+  const [showFilePicker, setShowFilePicker] = useState(false);
+  const [showMentionDropdown, setShowMentionDropdown] = useState(false);
+  const [mentionQuery, setMentionQuery] = useState("");
+  const [mentionFiles, setMentionFiles] = useState<any[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const resizeStartX = useRef<number>(0);
   const resizeStartWidth = useRef<number>(380);
 
@@ -602,6 +610,25 @@ export const AISidebar: React.FC<AISidebarProps> = ({
     };
   }, [isResizing, sidebarWidth, onWidthChange]);
 
+  // Handle clicking outside to close mention dropdown
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (showMentionDropdown && textareaRef.current && 
+          !textareaRef.current.contains(event.target as Node)) {
+        setShowMentionDropdown(false);
+        setMentionQuery("");
+      }
+    };
+
+    if (showMentionDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showMentionDropdown]);
+
   const handleAPIKeySave = async (apiKey: string) => {
     try {
       const result = await window.electronAPI.invoke("ai:set-api-key", {
@@ -624,6 +651,109 @@ export const AISidebar: React.FC<AISidebarProps> = ({
     }
   };
 
+  const loadMentionFiles = async () => {
+    try {
+      const result = await (window as any).electronAPI.invoke('files:list');
+      if (result.success) {
+        setMentionFiles(result.data || []);
+      }
+    } catch (error) {
+      console.error('Failed to load files for mentions:', error);
+    }
+  };
+
+  const flattenFiles = (files: any[]): any[] => {
+    const flat: any[] = [];
+    files.forEach(file => {
+      if (!file.isDirectory) {
+        flat.push(file);
+      }
+      if (file.children) {
+        flat.push(...flattenFiles(file.children));
+      }
+    });
+    return flat;
+  };
+
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const value = e.target.value;
+    const cursorPos = e.target.selectionStart;
+    setInputValue(value);
+
+    // Check for @ mentions
+    const textBeforeCursor = value.slice(0, cursorPos);
+    const atMatch = textBeforeCursor.match(/@([^@\s]*)$/);
+    
+    
+    if (atMatch) {
+      const query = atMatch[1];
+      setMentionQuery(query);
+      setShowMentionDropdown(true);
+      
+      // Load files if not already loaded
+      if (mentionFiles.length === 0) {
+        loadMentionFiles();
+      }
+    } else {
+      setShowMentionDropdown(false);
+      setMentionQuery("");
+    }
+  };
+
+  const handleMentionSelect = async (file: any) => {
+    console.log('handleMentionSelect called with:', file);
+    
+    try {
+      // Read the file
+      console.log('Reading file:', file.path);
+      const result = await (window as any).electronAPI.invoke('files:read', file.path);
+      console.log('File read result:', result);
+      
+      if (result.success) {
+        const fileRef: FileReference = result.data;
+        console.log('Adding file to attachedFiles:', fileRef);
+        setAttachedFiles(prev => {
+          console.log('Previous attached files:', prev);
+          const newFiles = [...prev, fileRef];
+          console.log('New attached files:', newFiles);
+          return newFiles;
+        });
+        
+        // Replace the @mention with just the filename
+        const textarea = textareaRef.current;
+        if (textarea) {
+          const cursorPos = textarea.selectionStart;
+          const textBeforeCursor = inputValue.slice(0, cursorPos);
+          const textAfterCursor = inputValue.slice(cursorPos);
+          
+          // Find and replace the @mention
+          const atMatch = textBeforeCursor.match(/@([^@\s]*)$/);
+          if (atMatch) {
+            const newTextBefore = textBeforeCursor.slice(0, -atMatch[0].length);
+            const newValue = `${newTextBefore}@${file.name} ${textAfterCursor}`;
+            console.log('Updating input value from:', inputValue, 'to:', newValue);
+            setInputValue(newValue);
+            
+            // Set cursor position after the mention
+            setTimeout(() => {
+              const newCursorPos = newTextBefore.length + file.name.length + 2;
+              textarea.setSelectionRange(newCursorPos, newCursorPos);
+              textarea.focus();
+            }, 0);
+          }
+        }
+      } else {
+        console.error('Failed to read file:', result.error);
+      }
+    } catch (error) {
+      console.error('Error selecting mentioned file:', error);
+    }
+    
+    setShowMentionDropdown(false);
+    setMentionQuery("");
+  };
+
   const handleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault();
     if (!inputValue.trim() || isProcessing) return;
@@ -638,10 +768,12 @@ export const AISidebar: React.FC<AISidebarProps> = ({
       role: "user",
       content: inputValue.trim(),
       timestamp: new Date(),
+      fileReferences: attachedFiles.length > 0 ? [...attachedFiles] : undefined,
     };
 
     setMessages((prev) => [...prev, userMessage]);
     setInputValue("");
+    setAttachedFiles([]); // Clear attached files after sending
     setIsProcessing(true);
 
     // Create abort controller for this request
@@ -649,9 +781,18 @@ export const AISidebar: React.FC<AISidebarProps> = ({
     setAbortController(controller);
 
     try {
+      // Prepare the message with file context
+      let messageWithFiles = userMessage.content;
+      if (attachedFiles.length > 0) {
+        const fileContext = attachedFiles.map(file => 
+          `\n\n--- File: ${file.fileName} (${file.relativePath}) ---\n${file.content}\n--- End of ${file.fileName} ---`
+        ).join('');
+        messageWithFiles = `${userMessage.content}${fileContext}`;
+      }
+
       const result = await window.electronAPI.invoke("ai:chat", {
         conversationId,
-        message: userMessage.content,
+        message: messageWithFiles,
       });
 
       if (result.success) {
@@ -902,6 +1043,40 @@ export const AISidebar: React.FC<AISidebarProps> = ({
               }`,
             }}
           >
+            {/* File References */}
+            {message.fileReferences && message.fileReferences.length > 0 && (
+              <div style={{
+                marginBottom: '8px',
+                padding: '8px',
+                backgroundColor: 'rgba(0, 0, 0, 0.2)',
+                borderRadius: '6px',
+                fontSize: '12px',
+              }}>
+                <div style={{ marginBottom: '4px', opacity: 0.8 }}>
+                  📎 Attached files:
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                  {message.fileReferences.map((file, index) => (
+                    <span
+                      key={index}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        padding: '2px 6px',
+                        backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                        borderRadius: '3px',
+                        fontSize: '11px',
+                      }}
+                    >
+                      <File size={10} />
+                      {file.fileName}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            
             <MessageWithHover 
               message={message}
               onCreateCodeWindow={handleCreateCodeWindow}
@@ -941,9 +1116,63 @@ export const AISidebar: React.FC<AISidebarProps> = ({
         }}
       >
         <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-          <textarea
+          {/* Attached Files Display */}
+          {attachedFiles.length > 0 && (
+            <div style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: '8px',
+              padding: '8px',
+              backgroundColor: '#374151',
+              borderRadius: '6px',
+              border: '1px solid #4b5563',
+            }}>
+              {attachedFiles.map((file, index) => (
+                <div
+                  key={index}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '4px 8px',
+                    backgroundColor: '#1f2937',
+                    borderRadius: '4px',
+                    fontSize: '12px',
+                    color: '#f1f5f9',
+                    border: '1px solid #6b7280',
+                  }}
+                >
+                  <File size={14} color="#9ca3af" />
+                  <span>{file.fileName}</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAttachedFiles(prev => prev.filter((_, i) => i !== index));
+                    }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#9ca3af',
+                      cursor: 'pointer',
+                      padding: '2px',
+                      borderRadius: '2px',
+                      display: 'flex',
+                      alignItems: 'center',
+                    }}
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Chat Input Container */}
+          <div style={{ position: 'relative' }}>
+            <textarea
+            ref={textareaRef}
             value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
+            onChange={handleInputChange}
             onKeyDown={handleKeyDown}
             placeholder={
               isConfigured
@@ -974,6 +1203,132 @@ export const AISidebar: React.FC<AISidebarProps> = ({
               e.target.style.borderColor = "#374151";
             }}
           />
+          
+          {/* Attach File Button */}
+          <button
+            type="button"
+            onClick={() => setShowFilePicker(true)}
+            disabled={isProcessing || !isConfigured}
+            style={{
+              position: 'absolute',
+              bottom: '8px',
+              right: '8px',
+              width: '32px',
+              height: '32px',
+              backgroundColor: '#374151',
+              border: '1px solid #4b5563',
+              borderRadius: '6px',
+              cursor: isProcessing || !isConfigured ? 'not-allowed' : 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'all 0.2s ease',
+            }}
+            onMouseEnter={(e) => {
+              if (!isProcessing && isConfigured) {
+                e.currentTarget.style.backgroundColor = '#4b5563';
+                e.currentTarget.style.borderColor = '#6b7280';
+              }
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = '#374151';
+              e.currentTarget.style.borderColor = '#4b5563';
+            }}
+            title="Attach files"
+          >
+            <Paperclip size={16} color={isProcessing || !isConfigured ? '#6b7280' : '#9ca3af'} />
+          </button>
+
+          {/* @ Mention Dropdown - Positioned relative to input container */}
+          {showMentionDropdown && (
+            <div
+              style={{
+                position: 'absolute',
+                left: '0px',
+                bottom: '100%', // Position above the textarea
+                marginBottom: '8px',
+                backgroundColor: '#1f2937',
+                border: '1px solid #374151',
+                borderRadius: '8px',
+                boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
+                maxHeight: '200px',
+                overflowY: 'auto',
+                zIndex: 1002,
+                minWidth: '200px',
+                width: '100%',
+              }}
+            >
+              <div 
+                onClick={(e) => {
+                  console.log('Dropdown container clicked:', e);
+                }}
+                style={{ padding: '4px 0' }}
+              >
+                {(() => {
+                  const allFiles = flattenFiles(mentionFiles);
+                  const filteredFiles = allFiles.filter(file =>
+                    file.name.toLowerCase().includes(mentionQuery.toLowerCase())
+                  );
+                  
+                  console.log('Rendering files:', filteredFiles);
+                  
+                  return filteredFiles.length > 0 ? (
+                    filteredFiles.slice(0, 10).map((file, index) => (
+                      <div
+                        key={`file-${index}-${file.path}`}
+                        onMouseDown={(e) => {
+                          console.log('Mouse down on file!', file);
+                          // Try handling on mouse down instead of click
+                          e.preventDefault();
+                          e.stopPropagation();
+                          console.log('Calling handleMentionSelect from mouseDown');
+                          handleMentionSelect(file);
+                        }}
+                        onClick={(e) => {
+                          console.log('File div clicked!', file, e);
+                        }}
+                        style={{
+                          padding: '8px 12px',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          fontSize: '14px',
+                          color: '#f1f5f9',
+                          borderBottom: index < filteredFiles.length - 1 ? '1px solid #374151' : 'none',
+                          backgroundColor: 'transparent',
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.backgroundColor = '#374151';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor = 'transparent';
+                        }}
+                      >
+                        <File size={14} color="#9ca3af" />
+                        <span>{file.name}</span>
+                        <span style={{ fontSize: '12px', color: '#6b7280', marginLeft: 'auto' }}>
+                          {file.path.split('/').slice(-2, -1)[0] || ''}
+                        </span>
+                      </div>
+                    ))
+                  ) : (
+                    <div style={{
+                      padding: '8px 12px',
+                      fontSize: '14px',
+                      color: '#9ca3af',
+                      textAlign: 'center',
+                    }}>
+                      {mentionQuery ? 'No matching files' : 'No files found'}
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+          )}
+
+          </div>
+
           <div
             style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}
           >
@@ -1048,6 +1403,15 @@ export const AISidebar: React.FC<AISidebarProps> = ({
         isOpen={showAPIKeyModal}
         onClose={() => setShowAPIKeyModal(false)}
         onSave={handleAPIKeySave}
+      />
+
+      <FilePicker
+        isOpen={showFilePicker}
+        onClose={() => setShowFilePicker(false)}
+        onSelectFiles={(files) => {
+          setAttachedFiles(prev => [...prev, ...files]);
+        }}
+        multiSelect={true}
       />
 
       <style>

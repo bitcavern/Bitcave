@@ -76,9 +76,9 @@ export const ProjectIndicator: React.FC<ProjectIndicatorProps> = ({
           height: "40px",
           backgroundColor: "rgba(31, 41, 55, 0.2)",
           backdropFilter: "blur(10px)",
-          zIndex: 200,
-          // @ts-ignore - WebkitAppRegion is a valid CSS property for Electron
-          WebkitAppRegion: "drag",
+          zIndex: 10000,
+          // @ts-ignore - webkit-app-region is a valid CSS property for Electron
+          WebkitAppRegion: "drag" as any,
           borderBottom: "1px solid rgba(75, 85, 99, 0.5)",
           display: "flex",
           alignItems: "center",
@@ -105,9 +105,9 @@ export const ProjectIndicator: React.FC<ProjectIndicatorProps> = ({
           height: "40px",
           backgroundColor: "rgba(31, 41, 55, 0.2)",
           backdropFilter: "blur(10px)",
-          zIndex: 200,
-          // @ts-ignore - WebkitAppRegion is a valid CSS property for Electron
-          WebkitAppRegion: "drag",
+          zIndex: 10000,
+          // @ts-ignore - webkit-app-region is a valid CSS property for Electron
+          WebkitAppRegion: "drag" as any,
           borderBottom: "1px solid rgba(75, 85, 99, 0.5)",
           display: "flex",
           alignItems: "center",
@@ -121,8 +121,8 @@ export const ProjectIndicator: React.FC<ProjectIndicatorProps> = ({
         <button
           onClick={() => setShowProjectModal(true)}
           style={{
-            // @ts-ignore - WebkitAppRegion is a valid CSS property for Electron
-            WebkitAppRegion: "no-drag",
+            // @ts-ignore - WebkitAppRegion is a valid CSS property for Electron  
+            WebkitAppRegion: "no-drag" as any,
             background: "none",
             border: "none",
             color: "inherit",
