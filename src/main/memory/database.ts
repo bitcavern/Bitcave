@@ -36,6 +36,35 @@ export function getDb() {
       // Add a small delay to ensure the app is fully ready
       console.log("[MemoryDB] Waiting for app to be ready...");
 
+      // Check if existing database has old foreign key constraint
+      if (fs.existsSync(DB_PATH)) {
+        try {
+          const tempDb = new Database(DB_PATH, { readonly: true });
+          const tableInfo = tempDb.pragma("table_info(facts)") as any[];
+          const hasOldConstraint = tableInfo.some(
+            (col: any) =>
+              col.name === "vec_id" && col.pk === 0 && col.notnull === 0
+          );
+          tempDb.close();
+
+          if (hasOldConstraint) {
+            console.log(
+              "[MemoryDB] Detected old database schema with foreign key constraints, will recreate"
+            );
+            // Remove old database file
+            fs.unlinkSync(DB_PATH);
+          }
+        } catch (error) {
+          console.warn(
+            "[MemoryDB] Could not check existing database schema:",
+            error
+          );
+          if (fs.existsSync(DB_PATH)) {
+            fs.unlinkSync(DB_PATH);
+          }
+        }
+      }
+
       // Try to create the database with error handling
       try {
         console.log("[MemoryDB] Attempting to create database at:", DB_PATH);
@@ -236,7 +265,7 @@ function setupDatabase() {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         source_conversation_id TEXT,
         project_id TEXT,
-        vec_id INTEGER REFERENCES vec_facts(rowid)
+        vec_id INTEGER
       );
     `);
 

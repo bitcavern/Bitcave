@@ -17,23 +17,70 @@ export class FactExtractor {
   ): Promise<void> {
     const context = messages.map((m) => `${m.role}: ${m.content}`).join("\n");
 
-    const prompt = `
-      Extract key factual information about the user from this conversation.
-      Return as JSON array of facts with categories:
-      - personal (relationships, family, pets, location)
-      - preferences (technologies, approaches, styles)
-      - professional (job, skills, projects)
-      - interests (hobbies, topics)
+    const prompt = `You are a fact extraction assistant. Your task is to extract key factual information about the user from the conversation below.
 
-      Format: [{"content": "fact text", "category": "personal|preferences|professional|interests"}]
+IMPORTANT: You must respond with ONLY valid JSON. No other text, no explanations, no markdown formatting.
 
-      Context:
-      ${context}
-    `;
+Extract facts and categorize them into these categories:
+- personal (relationships, family, pets, location, personal details)
+- preferences (technologies, approaches, styles, likes/dislikes)
+- professional (job, skills, projects, work-related information)
+- interests (hobbies, topics, things they care about)
+
+Return the facts as a JSON array with this exact format:
+[{"content": "fact description", "category": "category_name"}]
+
+Example response:
+[{"content": "User has Edifier MR4 studio monitors", "category": "preferences"}, {"content": "User works on coding projects", "category": "professional"}]
+
+Conversation context:
+${context}
+
+Remember: ONLY return valid JSON, nothing else.`;
 
     try {
       const response = await this.aiService.processPrompt(prompt);
-      const facts = JSON.parse(response.trim());
+
+      // Clean the response to extract JSON
+      let cleanedResponse = response.trim();
+
+      // Try to find JSON in the response if it's wrapped in other text
+      const jsonMatch = cleanedResponse.match(/\[.*\]/s);
+      if (jsonMatch) {
+        cleanedResponse = jsonMatch[0];
+      }
+
+      // Remove any markdown code blocks
+      cleanedResponse = cleanedResponse
+        .replace(/```json\s*/, "")
+        .replace(/```\s*$/, "");
+
+      let facts;
+      try {
+        facts = JSON.parse(cleanedResponse);
+      } catch (parseError) {
+        console.warn(
+          "[FactExtractor] Failed to parse AI response as JSON:",
+          parseError
+        );
+        console.warn("[FactExtractor] Raw response:", response);
+        console.warn("[FactExtractor] Cleaned response:", cleanedResponse);
+
+        // Try to extract facts manually from the response
+        facts = this.extractFactsFromText(response);
+        if (facts.length === 0) {
+          console.warn(
+            "[FactExtractor] Could not extract facts from response, skipping"
+          );
+          return;
+        }
+      }
+
+      // Validate facts structure
+      if (!Array.isArray(facts)) {
+        console.warn("[FactExtractor] Response is not an array, skipping");
+        return;
+      }
 
       // Process and store facts with deduplication
       if (!this.memoryService.isDatabaseAvailable()) {
@@ -103,5 +150,56 @@ export class FactExtractor {
     } catch (error) {
       console.error("[FactExtractor] Error extracting facts:", error);
     }
+  }
+
+  /**
+   * Fallback method to extract facts from text when JSON parsing fails
+   */
+  private extractFactsFromText(
+    text: string
+  ): Array<{ content: string; category: string }> {
+    const facts: Array<{ content: string; category: string }> = [];
+
+    // Simple pattern matching to extract potential facts
+    const lines = text.split("\n").filter((line) => line.trim().length > 0);
+
+    for (const line of lines) {
+      // Look for lines that might contain factual information
+      if (line.includes(":") || line.includes("-") || line.includes("•")) {
+        const content = line.replace(/^[-•\s]+/, "").trim();
+        if (content.length > 10 && content.length < 200) {
+          // Try to categorize based on keywords
+          let category = "interests"; // default
+
+          if (
+            content.toLowerCase().includes("work") ||
+            content.toLowerCase().includes("job") ||
+            content.toLowerCase().includes("skill") ||
+            content.toLowerCase().includes("project")
+          ) {
+            category = "professional";
+          } else if (
+            content.toLowerCase().includes("like") ||
+            content.toLowerCase().includes("prefer") ||
+            content.toLowerCase().includes("use") ||
+            content.toLowerCase().includes("monitor") ||
+            content.toLowerCase().includes("subwoofer")
+          ) {
+            category = "preferences";
+          } else if (
+            content.toLowerCase().includes("family") ||
+            content.toLowerCase().includes("pet") ||
+            content.toLowerCase().includes("live") ||
+            content.toLowerCase().includes("home")
+          ) {
+            category = "personal";
+          }
+
+          facts.push({ content, category });
+        }
+      }
+    }
+
+    return facts;
   }
 }

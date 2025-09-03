@@ -75,6 +75,14 @@ export class AIService {
           updatedAt: new Date(),
         };
         this.conversations.set(conversationId, conversation);
+
+        // Also create in the database if it doesn't exist
+        if (this.memoryService && this.memoryService.isDatabaseAvailable()) {
+          const dbConversation = await this.memoryService.getConversation(conversationId);
+          if (!dbConversation) {
+            await this.memoryService.createConversation(conversationId, conversationId);
+          }
+        }
       }
 
       // Add user message

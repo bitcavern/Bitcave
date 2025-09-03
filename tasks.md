@@ -80,3 +80,7 @@
 - The file explorer needs to have expandable tree-like folders. All internal files should be hidden, the only thing visible should be documents added by the user to the project folder. - DONE
 
 - Let's properly theme scroll bars (and have them auto-hide)
+
+- Let's implement streaming AI responses (for chat only, not for background LLM calls like fact extraction)
+
+- All conversations have id "main" instead of a unique conversation id.

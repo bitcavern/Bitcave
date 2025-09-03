@@ -1,12 +1,12 @@
 import { getDb } from "./database";
 import { Fact, Conversation, ConversationMessage } from "./types";
-import { v4 as uuidv4 } from "uuid";
 import { EmbeddingService } from "./embedding-service";
 import { FactExtractor } from "./fact-extractor";
 import { AIService } from "../ai/ai-service";
+import type Database from "better-sqlite3";
 
 export class MemoryService {
-  private db;
+  private db: Database.Database | null;
   private embeddingService: EmbeddingService;
   private factExtractor: FactExtractor;
 
@@ -19,7 +19,7 @@ export class MemoryService {
     } catch (error) {
       console.error("[MemoryService] Failed to initialize:", error);
       // Initialize with a null db to prevent crashes
-      this.db = null as any;
+      this.db = null;
       this.embeddingService = new EmbeddingService();
       this.factExtractor = new FactExtractor(this, aiService);
     }
@@ -50,6 +50,7 @@ export class MemoryService {
   //- C O N V E R S A T I O N S
 
   public async createConversation(
+    id: string,
     title: string,
     projectId?: string
   ): Promise<Conversation> {
@@ -58,7 +59,7 @@ export class MemoryService {
     }
 
     const conversation: Conversation = {
-      id: uuidv4(),
+      id,
       title,
       project_id: projectId,
       created_at: new Date().toISOString(),
@@ -183,36 +184,56 @@ export class MemoryService {
       throw new Error("Database not initialized");
     }
 
+    // Generate embedding first (this is async)
     const embedding = await this.embeddingService.generateEmbedding(
       fact.content
     );
 
-    const vecResult = this.db
-      .prepare("INSERT INTO vec_facts (fact_embedding) VALUES (?)")
-      .run(embedding);
-    const vecId = vecResult.lastInsertRowid;
+    // Wrap the database operations in a transaction to ensure atomicity
+    return this.db.transaction(() => {
+      // Insert into vec_facts first
+      const vecResult = this.db!.prepare(
+        "INSERT INTO vec_facts (fact_embedding) VALUES (?)"
+      ).run(embedding);
+      const vecId = vecResult.lastInsertRowid;
 
-    const newFact: Fact = {
-      ...fact,
-      id: 0, // auto-incremented
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      vec_id: vecId as number,
-    };
+      if (!vecId) {
+        throw new Error("Failed to insert embedding into vec_facts");
+      }
 
-    const stmt = this.db.prepare(
-      "INSERT INTO facts (content, category, confidence, source_conversation_id, project_id, vec_id) VALUES (?, ?, ?, ?, ?, ?)"
-    );
-    const result = stmt.run(
-      newFact.content,
-      newFact.category,
-      newFact.confidence,
-      newFact.source_conversation_id,
-      newFact.project_id,
-      newFact.vec_id
-    );
-    newFact.id = result.lastInsertRowid as number;
-    return newFact;
+      // Verify the vec_facts record exists before proceeding
+      const vecCheck = this.db!.prepare(
+        "SELECT COUNT(*) as count FROM vec_facts WHERE rowid = ?"
+      ).get(vecId) as { count: number } | undefined;
+
+      if (!vecCheck || vecCheck.count === 0) {
+        throw new Error("vec_facts record not found after insertion");
+      }
+
+      const newFact: Fact = {
+        ...fact,
+        id: 0, // auto-incremented
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        vec_id: vecId as number,
+      };
+
+      // Insert into facts table
+      const stmt = this.db!.prepare(
+        "INSERT INTO facts (content, category, confidence, source_conversation_id, project_id, vec_id) VALUES (?, ?, ?, ?, ?, ?)"
+      );
+      const result = stmt.run(
+        newFact.content,
+        newFact.category,
+        newFact.confidence,
+        newFact.source_conversation_id,
+        newFact.project_id,
+        newFact.vec_id
+      );
+
+      newFact.id = result.lastInsertRowid as number;
+      return newFact;
+    })();
   }
 
   public async searchFacts(
@@ -256,26 +277,42 @@ export class MemoryService {
       return;
     }
 
-    // If updating content, need to regenerate embedding
-    if (updates.content) {
-      const fact = await this.getFact(id);
-      if (fact) {
-        const embedding = await this.embeddingService.generateEmbedding(
-          updates.content
-        );
-        // Update vector table
-        this.db
-          .prepare("UPDATE vec_facts SET fact_embedding = ? WHERE rowid = ?")
-          .run(embedding, fact.vec_id);
-      }
+    // Load the current fact
+    const current = this.db
+      .prepare("SELECT * FROM facts WHERE id = ?")
+      .get(id) as Fact | undefined;
+    if (!current) return;
+
+    // If content changes, generate embedding outside of the transaction
+    let newEmbedding: Float32Array | null = null;
+    if (
+      typeof updates.content === "string" &&
+      updates.content !== current.content
+    ) {
+      newEmbedding = await this.embeddingService.generateEmbedding(
+        updates.content
+      );
     }
 
-    const fields = Object.keys(updates)
-      .map((key) => `${key} = ?`)
-      .join(", ");
-    const values = Object.values(updates);
-    const stmt = this.db.prepare(`UPDATE facts SET ${fields} WHERE id = ?`);
-    stmt.run(...values, id);
+    // Apply DB changes atomically
+    this.db.transaction(() => {
+      if (newEmbedding) {
+        this.db!.prepare(
+          "UPDATE vec_facts SET fact_embedding = ? WHERE rowid = ?"
+        ).run(newEmbedding, current.vec_id);
+      }
+
+      if (Object.keys(updates).length > 0) {
+        const fields = Object.keys(updates)
+          .map((key) => `${key} = ?`)
+          .join(", ");
+        const values = Object.values(updates);
+        const stmt = this.db!.prepare(
+          `UPDATE facts SET ${fields} WHERE id = ?`
+        );
+        stmt.run(...values, id);
+      }
+    })();
   }
 
   public async deleteFact(id: number): Promise<void> {
@@ -283,16 +320,24 @@ export class MemoryService {
       return;
     }
 
-    // Get fact to find associated vector
-    const fact = await this.getFact(id);
-    if (fact && fact.vec_id) {
-      // Delete from vector table first
-      this.db.prepare("DELETE FROM vec_facts WHERE rowid = ?").run(fact.vec_id);
-    }
+    // Wrap the delete operations in a transaction to ensure atomicity
+    this.db.transaction(() => {
+      // Get fact to find associated vector
+      const fact = this.db!.prepare("SELECT * FROM facts WHERE id = ?").get(
+        id
+      ) as Fact | undefined;
 
-    // Delete from facts table
-    const stmt = this.db.prepare("DELETE FROM facts WHERE id = ?");
-    stmt.run(id);
+      if (fact && fact.vec_id) {
+        // Delete from vector table first
+        this.db!.prepare("DELETE FROM vec_facts WHERE rowid = ?").run(
+          fact.vec_id
+        );
+      }
+
+      // Delete from facts table
+      const stmt = this.db!.prepare("DELETE FROM facts WHERE id = ?");
+      stmt.run(id);
+    })();
   }
 
   public getDatabase() {
@@ -300,7 +345,7 @@ export class MemoryService {
   }
 
   public isDatabaseAvailable(): boolean {
-    return this.db !== null && this.db.open;
+    return this.db !== null && (this.db as any).open;
   }
 
   public async reinitializeDatabase(): Promise<void> {
@@ -309,7 +354,7 @@ export class MemoryService {
       console.log("[MemoryService] Database reinitialized successfully");
     } catch (error) {
       console.error("[MemoryService] Failed to reinitialize database:", error);
-      this.db = null as any;
+      this.db = null;
     }
   }
 }
