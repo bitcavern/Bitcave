@@ -1,5 +1,5 @@
 import { AILogger } from "./logger";
-import * as dotenv from 'dotenv';
+import * as dotenv from "dotenv";
 
 dotenv.config();
 
@@ -68,7 +68,8 @@ export interface OpenRouterResponse {
 export class OpenRouterClient {
   private apiKey: string;
   private baseUrl = "https://openrouter.ai/api/v1";
-  private defaultModel = process.env.OPENROUTER_DEFAULT_MODEL || "anthropic/claude-sonnet-4";
+  private defaultModel =
+    process.env.OPENROUTER_DEFAULT_MODEL || "anthropic/claude-sonnet-4";
   private logger?: AILogger;
 
   constructor(apiKey: string) {
@@ -80,7 +81,7 @@ export class OpenRouterClient {
   }
 
   async createChatCompletion(
-    request: OpenRouterRequest
+    request: OpenRouterRequest,
   ): Promise<OpenRouterResponse> {
     const url = `${this.baseUrl}/chat/completions`;
 
@@ -133,7 +134,7 @@ export class OpenRouterClient {
       const error = new Error(
         `OpenRouter API error: ${response.status} - ${
           errorData.error?.message || response.statusText
-        }`
+        }`,
       );
 
       // Log the error
@@ -179,5 +180,9 @@ export class OpenRouterClient {
 
   setModel(model: string) {
     this.defaultModel = model;
+  }
+
+  getDefaultModel(): string {
+    return this.defaultModel;
   }
 }

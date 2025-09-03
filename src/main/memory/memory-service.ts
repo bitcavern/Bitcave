@@ -1,9 +1,9 @@
-import { getDb } from './database';
-import { Fact, Conversation, ConversationMessage } from './types';
-import { v4 as uuidv4 } from 'uuid';
-import { EmbeddingService } from './embedding-service';
-import { FactExtractor } from './fact-extractor';
-import { AIService } from '../ai/ai-service';
+import { getDb } from "./database";
+import { Fact, Conversation, ConversationMessage } from "./types";
+import { v4 as uuidv4 } from "uuid";
+import { EmbeddingService } from "./embedding-service";
+import { FactExtractor } from "./fact-extractor";
+import { AIService } from "../ai/ai-service";
 
 export class MemoryService {
   private db;
@@ -11,10 +11,18 @@ export class MemoryService {
   private factExtractor: FactExtractor;
 
   constructor(aiService: AIService) {
-    this.db = getDb();
-    this.embeddingService = new EmbeddingService();
-    this.factExtractor = new FactExtractor(this, aiService);
-    this.initialize();
+    try {
+      this.db = getDb();
+      this.embeddingService = new EmbeddingService();
+      this.factExtractor = new FactExtractor(this, aiService);
+      this.initialize();
+    } catch (error) {
+      console.error("[MemoryService] Failed to initialize:", error);
+      // Initialize with a null db to prevent crashes
+      this.db = null as any;
+      this.embeddingService = new EmbeddingService();
+      this.factExtractor = new FactExtractor(this, aiService);
+    }
   }
 
   private async initialize() {
@@ -28,7 +36,10 @@ export class MemoryService {
     }
 
     // Trigger extraction every 3 messages, and only if there are more than 2 messages
-    if (conversation.message_count > 2 && conversation.message_count % 3 === 0) {
+    if (
+      conversation.message_count > 2 &&
+      conversation.message_count % 3 === 0
+    ) {
       const messages = await this.getMessagesForConversation(conversationId);
       // Get the last 6 messages for context
       const recentMessages = messages.slice(-6);
@@ -38,7 +49,14 @@ export class MemoryService {
 
   //- C O N V E R S A T I O N S
 
-  public async createConversation(title: string, projectId?: string): Promise<Conversation> {
+  public async createConversation(
+    title: string,
+    projectId?: string
+  ): Promise<Conversation> {
+    if (!this.db) {
+      throw new Error("Database not initialized");
+    }
+
     const conversation: Conversation = {
       id: uuidv4(),
       title,
@@ -48,33 +66,67 @@ export class MemoryService {
       message_count: 0,
     };
     const stmt = this.db.prepare(
-      'INSERT INTO conversations (id, title, project_id, created_at, updated_at, message_count) VALUES (?, ?, ?, ?, ?, ?)',
+      "INSERT INTO conversations (id, title, project_id, created_at, updated_at, message_count) VALUES (?, ?, ?, ?, ?, ?)"
     );
-    stmt.run(conversation.id, conversation.title, conversation.project_id, conversation.created_at, conversation.updated_at, conversation.message_count);
+    stmt.run(
+      conversation.id,
+      conversation.title,
+      conversation.project_id,
+      conversation.created_at,
+      conversation.updated_at,
+      conversation.message_count
+    );
     return conversation;
   }
 
   public async getConversation(id: string): Promise<Conversation | null> {
-    const stmt = this.db.prepare('SELECT * FROM conversations WHERE id = ?');
+    if (!this.db) {
+      return null;
+    }
+
+    const stmt = this.db.prepare("SELECT * FROM conversations WHERE id = ?");
     const conversation = stmt.get(id) as Conversation | undefined;
     return conversation || null;
   }
 
-  public async updateConversation(id: string, updates: Partial<Conversation>): Promise<void> {
-    const fields = Object.keys(updates).map(key => `${key} = ?`).join(', ');
+  public async updateConversation(
+    id: string,
+    updates: Partial<Conversation>
+  ): Promise<void> {
+    if (!this.db) {
+      return;
+    }
+
+    const fields = Object.keys(updates)
+      .map((key) => `${key} = ?`)
+      .join(", ");
     const values = Object.values(updates);
-    const stmt = this.db.prepare(`UPDATE conversations SET ${fields} WHERE id = ?`);
+    const stmt = this.db.prepare(
+      `UPDATE conversations SET ${fields} WHERE id = ?`
+    );
     stmt.run(...values, id);
   }
 
   public async deleteConversation(id: string): Promise<void> {
-    const stmt = this.db.prepare('DELETE FROM conversations WHERE id = ?');
+    if (!this.db) {
+      return;
+    }
+
+    const stmt = this.db.prepare("DELETE FROM conversations WHERE id = ?");
     stmt.run(id);
   }
 
   //- M E S S A G E S
 
-  public async addMessageToConversation(conversationId: string, role: 'user' | 'assistant', content: string): Promise<ConversationMessage> {
+  public async addMessageToConversation(
+    conversationId: string,
+    role: "user" | "assistant",
+    content: string
+  ): Promise<ConversationMessage> {
+    if (!this.db) {
+      throw new Error("Database not initialized");
+    }
+
     const message: ConversationMessage = {
       id: 0, // This will be auto-incremented by the database
       conversation_id: conversationId,
@@ -85,13 +137,23 @@ export class MemoryService {
     };
 
     const stmt = this.db.prepare(
-      'INSERT INTO conversation_messages (conversation_id, role, content, timestamp, processed_for_facts) VALUES (?, ?, ?, ?, ?)',
+      "INSERT INTO conversation_messages (conversation_id, role, content, timestamp, processed_for_facts) VALUES (?, ?, ?, ?, ?)"
     );
-    const result = stmt.run(message.conversation_id, message.role, message.content, message.timestamp, message.processed_for_facts ? 1 : 0);
+    const result = stmt.run(
+      message.conversation_id,
+      message.role,
+      message.content,
+      message.timestamp,
+      message.processed_for_facts ? 1 : 0
+    );
     message.id = result.lastInsertRowid as number;
 
     // Update the message_count and updated_at in the conversations table
-    this.db.prepare('UPDATE conversations SET message_count = message_count + 1, updated_at = ? WHERE id = ?').run(new Date().toISOString(), conversationId);
+    this.db
+      .prepare(
+        "UPDATE conversations SET message_count = message_count + 1, updated_at = ? WHERE id = ?"
+      )
+      .run(new Date().toISOString(), conversationId);
 
     // Trigger fact extraction if needed
     this.maybeExtractFacts(conversationId);
@@ -99,17 +161,35 @@ export class MemoryService {
     return message;
   }
 
-  public async getMessagesForConversation(conversationId: string): Promise<ConversationMessage[]> {
-    const stmt = this.db.prepare('SELECT * FROM conversation_messages WHERE conversation_id = ? ORDER BY timestamp ASC');
+  public async getMessagesForConversation(
+    conversationId: string
+  ): Promise<ConversationMessage[]> {
+    if (!this.db) {
+      return [];
+    }
+
+    const stmt = this.db.prepare(
+      "SELECT * FROM conversation_messages WHERE conversation_id = ? ORDER BY timestamp ASC"
+    );
     return stmt.all(conversationId) as ConversationMessage[];
   }
 
   //- F A C T S
 
-  public async addFact(fact: Omit<Fact, 'id' | 'created_at' | 'updated_at' | 'vec_id'>): Promise<Fact> {
-    const embedding = await this.embeddingService.generateEmbedding(fact.content);
+  public async addFact(
+    fact: Omit<Fact, "id" | "created_at" | "updated_at" | "vec_id">
+  ): Promise<Fact> {
+    if (!this.db) {
+      throw new Error("Database not initialized");
+    }
 
-    const vecResult = this.db.prepare('INSERT INTO vec_facts (fact_embedding) VALUES (?)').run(embedding);
+    const embedding = await this.embeddingService.generateEmbedding(
+      fact.content
+    );
+
+    const vecResult = this.db
+      .prepare("INSERT INTO vec_facts (fact_embedding) VALUES (?)")
+      .run(embedding);
     const vecId = vecResult.lastInsertRowid;
 
     const newFact: Fact = {
@@ -121,14 +201,28 @@ export class MemoryService {
     };
 
     const stmt = this.db.prepare(
-      'INSERT INTO facts (content, category, confidence, source_conversation_id, project_id, vec_id) VALUES (?, ?, ?, ?, ?, ?)',
+      "INSERT INTO facts (content, category, confidence, source_conversation_id, project_id, vec_id) VALUES (?, ?, ?, ?, ?, ?)"
     );
-    const result = stmt.run(newFact.content, newFact.category, newFact.confidence, newFact.source_conversation_id, newFact.project_id, newFact.vec_id);
+    const result = stmt.run(
+      newFact.content,
+      newFact.category,
+      newFact.confidence,
+      newFact.source_conversation_id,
+      newFact.project_id,
+      newFact.vec_id
+    );
     newFact.id = result.lastInsertRowid as number;
     return newFact;
   }
 
-  public async searchFacts(query: string, limit: number = 10): Promise<(Fact & { distance: number })[]> {
+  public async searchFacts(
+    query: string,
+    limit: number = 10
+  ): Promise<(Fact & { distance: number })[]> {
+    if (!this.db) {
+      return [];
+    }
+
     const queryEmbedding = await this.embeddingService.generateEmbedding(query);
 
     const stmt = this.db.prepare(`
@@ -141,43 +235,63 @@ export class MemoryService {
       LIMIT ?
     `);
 
-    const results = stmt.all(queryEmbedding, limit) as (Fact & { distance: number })[];
+    const results = stmt.all(queryEmbedding, limit) as (Fact & {
+      distance: number;
+    })[];
     return results;
   }
 
   public async getFact(id: number): Promise<Fact | null> {
-    const stmt = this.db.prepare('SELECT * FROM facts WHERE id = ?');
+    if (!this.db) {
+      return null;
+    }
+
+    const stmt = this.db.prepare("SELECT * FROM facts WHERE id = ?");
     const fact = stmt.get(id) as Fact | undefined;
     return fact || null;
   }
 
   public async updateFact(id: number, updates: Partial<Fact>): Promise<void> {
+    if (!this.db) {
+      return;
+    }
+
     // If updating content, need to regenerate embedding
     if (updates.content) {
       const fact = await this.getFact(id);
       if (fact) {
-        const embedding = await this.embeddingService.generateEmbedding(updates.content);
+        const embedding = await this.embeddingService.generateEmbedding(
+          updates.content
+        );
         // Update vector table
-        this.db.prepare('UPDATE vec_facts SET fact_embedding = ? WHERE rowid = ?').run(embedding, fact.vec_id);
+        this.db
+          .prepare("UPDATE vec_facts SET fact_embedding = ? WHERE rowid = ?")
+          .run(embedding, fact.vec_id);
       }
     }
 
-    const fields = Object.keys(updates).map(key => `${key} = ?`).join(', ');
+    const fields = Object.keys(updates)
+      .map((key) => `${key} = ?`)
+      .join(", ");
     const values = Object.values(updates);
     const stmt = this.db.prepare(`UPDATE facts SET ${fields} WHERE id = ?`);
     stmt.run(...values, id);
   }
 
   public async deleteFact(id: number): Promise<void> {
+    if (!this.db) {
+      return;
+    }
+
     // Get fact to find associated vector
     const fact = await this.getFact(id);
     if (fact && fact.vec_id) {
       // Delete from vector table first
-      this.db.prepare('DELETE FROM vec_facts WHERE rowid = ?').run(fact.vec_id);
+      this.db.prepare("DELETE FROM vec_facts WHERE rowid = ?").run(fact.vec_id);
     }
-    
+
     // Delete from facts table
-    const stmt = this.db.prepare('DELETE FROM facts WHERE id = ?');
+    const stmt = this.db.prepare("DELETE FROM facts WHERE id = ?");
     stmt.run(id);
   }
 
@@ -185,4 +299,17 @@ export class MemoryService {
     return this.db;
   }
 
+  public isDatabaseAvailable(): boolean {
+    return this.db !== null && this.db.open;
+  }
+
+  public async reinitializeDatabase(): Promise<void> {
+    try {
+      this.db = getDb();
+      console.log("[MemoryService] Database reinitialized successfully");
+    } catch (error) {
+      console.error("[MemoryService] Failed to reinitialize database:", error);
+      this.db = null as any;
+    }
+  }
 }

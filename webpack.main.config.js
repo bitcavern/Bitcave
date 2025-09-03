@@ -17,6 +17,11 @@ module.exports = {
       "@": path.resolve(__dirname, "src"),
     },
   },
+  externals: {
+    "@xenova/transformers": "commonjs2 @xenova/transformers",
+    "better-sqlite3": "commonjs2 better-sqlite3",
+    "sqlite-vec": "commonjs2 sqlite-vec",
+  },
   module: {
     rules: [
       {
@@ -28,6 +33,10 @@ module.exports = {
           },
         },
         exclude: /node_modules/,
+      },
+      {
+        test: /\.node$/,
+        use: "node-loader",
       },
     ],
   },

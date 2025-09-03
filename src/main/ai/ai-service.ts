@@ -1,6 +1,7 @@
 import {
   OpenRouterClient,
   OpenRouterMessage,
+  OpenRouterRequest,
   Tool,
   ToolCall,
 } from "./openrouter-client";
@@ -50,7 +51,10 @@ export class AIService {
     return getOpenRouterToolDefinitions();
   }
 
-  async chat(conversationId: string, userMessage: string): Promise<{ content: string; inlineExecution?: any }> {
+  async chat(
+    conversationId: string,
+    userMessage: string
+  ): Promise<{ content: string; inlineExecution?: any }> {
     console.log(
       `[AIService] Starting chat - conversationId: ${conversationId}, message: "${userMessage}"`
     );
@@ -80,8 +84,16 @@ export class AIService {
       });
 
       // Store message in memory system for fact extraction
-      if (this.memoryService) {
-        await this.memoryService.addMessageToConversation(conversationId, "user", userMessage);
+      if (this.memoryService && this.memoryService.isDatabaseAvailable()) {
+        try {
+          await this.memoryService.addMessageToConversation(
+            conversationId,
+            "user",
+            userMessage
+          );
+        } catch (error) {
+          console.warn("[AIService] Failed to store message in memory:", error);
+        }
       }
 
       // Create abort controller for this conversation
@@ -117,7 +129,9 @@ export class AIService {
       // Create context message with memory context
       let contextContent = this.buildWindowContextMessage();
       if (this.memoryService) {
-        const memoryContext = await this.buildMemoryContext(conversation.messages);
+        const memoryContext = await this.buildMemoryContext(
+          conversation.messages
+        );
         if (memoryContext) {
           contextContent += "\n\n" + memoryContext;
         }
@@ -197,8 +211,9 @@ export class AIService {
           content.substring(0, 100)
         );
         // Check if we have a pending inline execution for this conversation
-        const inlineExecution = this.pendingInlineExecutions.get(conversationId);
-        
+        const inlineExecution =
+          this.pendingInlineExecutions.get(conversationId);
+
         const assistantMessage: any = {
           role: "assistant",
           content: content,
@@ -215,12 +230,16 @@ export class AIService {
 
         // Store assistant message in memory system
         if (this.memoryService) {
-          await this.memoryService.addMessageToConversation(conversationId, "assistant", content);
+          await this.memoryService.addMessageToConversation(
+            conversationId,
+            "assistant",
+            content
+          );
         }
 
         return {
           content,
-          inlineExecution: inlineExecution || undefined
+          inlineExecution: inlineExecution || undefined,
         };
       }
 
@@ -318,7 +337,7 @@ export class AIService {
         );
 
         // Check if this is an inline code execution
-        if (toolCall.function.name === 'executeInlineCode' && result) {
+        if (toolCall.function.name === "executeInlineCode" && result) {
           this.pendingInlineExecutions.set(conversationId, result);
         }
 
@@ -572,16 +591,18 @@ export class AIService {
     };
   }
 
-  private async buildMemoryContext(messages: OpenRouterMessage[]): Promise<string | null> {
+  private async buildMemoryContext(
+    messages: OpenRouterMessage[]
+  ): Promise<string | null> {
     if (!this.memoryService || messages.length === 0) {
       return null;
     }
 
     // Get recent user messages for context search
     const recentUserMessages = messages
-      .filter(m => m.role === "user")
+      .filter((m) => m.role === "user")
       .slice(-3) // Last 3 user messages
-      .map(m => m.content)
+      .map((m) => m.content)
       .join(" ");
 
     if (!recentUserMessages.trim()) {
@@ -590,22 +611,32 @@ export class AIService {
 
     try {
       // Search for relevant facts
-      const relevantFacts = await this.memoryService.searchFacts(recentUserMessages, 8);
-      
+      if (!this.memoryService || !this.memoryService.isDatabaseAvailable()) {
+        return null;
+      }
+
+      const relevantFacts = await this.memoryService.searchFacts(
+        recentUserMessages,
+        8
+      );
+
       if (relevantFacts.length === 0) {
         return null;
       }
 
       // Filter facts by similarity threshold and apply recency boost
       const filteredFacts = relevantFacts
-        .filter(fact => fact.distance < 0.7) // Similarity threshold
-        .map(fact => {
+        .filter((fact) => fact.distance < 0.7) // Similarity threshold
+        .map((fact) => {
           // Apply recency boost
-          const ageInDays = (Date.now() - new Date(fact.updated_at).getTime()) / (1000 * 60 * 60 * 24);
-          const recencyMultiplier = Math.max(0.5, 1 - (ageInDays / 30)); // Decay over 30 days
+          const ageInDays =
+            (Date.now() - new Date(fact.updated_at).getTime()) /
+            (1000 * 60 * 60 * 24);
+          const recencyMultiplier = Math.max(0.5, 1 - ageInDays / 30); // Decay over 30 days
           return {
             ...fact,
-            relevanceScore: (1 - fact.distance) * recencyMultiplier * fact.confidence
+            relevanceScore:
+              (1 - fact.distance) * recencyMultiplier * fact.confidence,
           };
         })
         .sort((a, b) => b.relevanceScore - a.relevanceScore)
@@ -617,17 +648,21 @@ export class AIService {
 
       // Build context string
       let context = "USER MEMORY CONTEXT:\n";
-      context += "The following information about the user may be relevant to this conversation:\n\n";
-      
+      context +=
+        "The following information about the user may be relevant to this conversation:\n\n";
+
       filteredFacts.forEach((fact, index) => {
-        context += `${index + 1}. ${fact.content} (${fact.category}, confidence: ${fact.confidence.toFixed(1)})\n`;
+        context += `${index + 1}. ${fact.content} (${
+          fact.category
+        }, confidence: ${fact.confidence.toFixed(1)})\n`;
       });
-      
-      context += "\nUse this information appropriately to provide more personalized and contextual responses.";
-      
+
+      context +=
+        "\nUse this information appropriately to provide more personalized and contextual responses.";
+
       return context;
     } catch (error) {
-      console.error('[AIService] Error building memory context:', error);
+      console.error("[AIService] Error building memory context:", error);
       return null;
     }
   }
@@ -641,13 +676,13 @@ export class AIService {
       "PRIMARY DIRECTIVE: When users ask for interactive tools, games, calculators, apps, or any functionality that requires HTML/CSS/JS, IMMEDIATELY use the createArtifactWindow tool. This is your PRIMARY tool for user requests.\n\n";
 
     context += "CODE EXECUTION RULES:\n";
-    context += "1. ALWAYS use executeInlineCode for simple calculations and math:\n";
+    context +=
+      "1. ALWAYS use executeInlineCode for simple calculations and math:\n";
     context +=
       "   - Basic math: '5!', 'sqrt(144)', '2**10', trigonometry functions\n";
     context +=
       "   - Unit conversions: 'convert 100F to celsius', distance, weight conversions\n";
-    context +=
-      "   - Simple statistics: mean, median, mode of small datasets\n";
+    context += "   - Simple statistics: mean, median, mode of small datasets\n";
     context +=
       "   - Quick computations that can be solved in 1-3 lines of Python\n";
     context += "2. ONLY use executeCodeInWindow for complex tasks:\n";
@@ -659,7 +694,8 @@ export class AIService {
       "   - When user explicitly asks for a 'code window' or 'programming environment'\n";
     context +=
       "   - Complex data analysis with plots or extensive data processing\n";
-    context += "3. Default to executeInlineCode for any computational question unless complexity requires a window.\n";
+    context +=
+      "3. Default to executeInlineCode for any computational question unless complexity requires a window.\n";
     context +=
       "4. Use executeInlineCode naturally - don't announce you're calculating, just provide the result.\n";
     context +=
@@ -714,11 +750,17 @@ export class AIService {
             : window.type === "code-execution"
             ? ` (${(window.metadata as any)?.language || "unknown"} code)`
             : window.type === "artifact"
-            ? ` (Interactive App: ${ (window.metadata as any)?.artifact?.title || "Unknown" })
+            ? ` (Interactive App: ${
+                (window.metadata as any)?.artifact?.title || "Unknown"
+              })
 `
             : "";
 
-        context += `  ${index + 1}. ${window.title || "Untitled"} [${ window.type }]${typeInfo} at (${window.position.x}, ${window.position.y}) ${ window.size.width }x${ window.size.height }\n`;
+        context += `  ${index + 1}. ${window.title || "Untitled"} [${
+          window.type
+        }]${typeInfo} at (${window.position.x}, ${window.position.y}) ${
+          window.size.width
+        }x${window.size.height}\n`;
 
         if (window.metadata?.label) {
           context += `     Label: ${window.metadata.label}\n`;
@@ -768,7 +810,10 @@ export class AIService {
 
     const request: OpenRouterRequest = {
       messages: [{ role: "user", content: prompt }],
-      model: model || process.env.FACT_EXTRACTION_MODEL || this.client.defaultModel,
+      model:
+        model ||
+        process.env.FACT_EXTRACTION_MODEL ||
+        this.client.getDefaultModel(),
     };
 
     const response = await this.client.createChatCompletion(request);

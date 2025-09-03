@@ -10,11 +10,7 @@ import { ProjectManager } from "./projects/project-manager";
 import { ArtifactManager } from "./artifacts/artifact-manager";
 import { UserManager } from "./user/user-manager";
 import { MemoryService } from "./memory/memory-service";
-import type {
-  IPCEventName,
-  IPCEventData,
-  UserSettings,
-} from "@/shared/types";
+import type { IPCEventName, IPCEventData, UserSettings } from "@/shared/types";
 
 // Load environment variables
 dotenv.config();
@@ -38,8 +34,9 @@ class BitcaveApp {
     this.webviewManager = new WebviewManager();
     this.projectManager = new ProjectManager();
     this.userManager = new UserManager();
-    this.memoryService = new MemoryService(this.aiService);
-    this.aiService.setMemoryService(this.memoryService);
+
+    // Don't initialize MemoryService in constructor - wait until app is ready
+    this.memoryService = null as any;
 
     // Initialize with environment API key if available
     const envApiKey = process.env.OPENROUTER_API_KEY;
@@ -55,6 +52,17 @@ class BitcaveApp {
     // Initialize project manager first
     await this.projectManager.initialize();
     this.projectManager.setWindowManager(this.windowManager);
+
+    // Initialize MemoryService after app is ready
+    try {
+      this.memoryService = new MemoryService(this.aiService);
+      this.aiService.setMemoryService(this.memoryService);
+      console.log("[BitcaveApp] MemoryService initialized successfully");
+    } catch (error) {
+      console.error("[BitcaveApp] Failed to initialize MemoryService:", error);
+      // Continue without memory service
+      this.memoryService = null as any;
+    }
 
     this.createMainWindow();
     this.setupIPCHandlers();
@@ -412,7 +420,9 @@ class BitcaveApp {
       async (event, conversationId: string) => {
         try {
           const conversations = this.aiService.getConversations();
-          const conversation = conversations.find((c) => c.id === conversationId);
+          const conversation = conversations.find(
+            (c) => c.id === conversationId
+          );
           return { success: true, data: conversation };
         } catch (error) {
           return { success: false, error: (error as Error).message };
@@ -575,18 +585,15 @@ class BitcaveApp {
 
         // List of internal Bitcave files and folders to hide from file explorer
         const isInternalBitcaveFile = (name: string): boolean => {
-          const hiddenFiles = [
-            'project.json',
-            'workspace.json',
-          ];
+          const hiddenFiles = ["project.json", "workspace.json"];
           const hiddenFolders = [
-            'artifacts',
-            'memory', 
-            'ai-conversations',
-            'assets',
-            '.bitcave'
+            "artifacts",
+            "memory",
+            "ai-conversations",
+            "assets",
+            ".bitcave",
           ];
-          
+
           return hiddenFiles.includes(name) || hiddenFolders.includes(name);
         };
 
@@ -597,7 +604,10 @@ class BitcaveApp {
           const files = await Promise.all(
             entries.map(async (entry: fs.Dirent) => {
               // Hide files/folders starting with "." or internal Bitcave files
-              if (entry.name.startsWith(".") || isInternalBitcaveFile(entry.name)) {
+              if (
+                entry.name.startsWith(".") ||
+                isInternalBitcaveFile(entry.name)
+              ) {
                 return null;
               }
               const fullPath = require("path").join(dir, entry.name);
@@ -639,7 +649,7 @@ class BitcaveApp {
         const fs = require("fs/promises");
         const resolvedFilePath = path.resolve(filePath);
         const resolvedProjectRoot = path.resolve(projectRoot);
-        
+
         if (!resolvedFilePath.startsWith(resolvedProjectRoot)) {
           return { success: false, error: "File is outside project directory" };
         }
@@ -657,25 +667,41 @@ class BitcaveApp {
         }
 
         // Check file extension for text formats
-        const textExtensions = ['.txt', '.md', '.json', '.js', '.ts', '.jsx', '.tsx', '.py', '.html', '.css', '.xml', '.yaml', '.yml', '.csv', '.log'];
+        const textExtensions = [
+          ".txt",
+          ".md",
+          ".json",
+          ".js",
+          ".ts",
+          ".jsx",
+          ".tsx",
+          ".py",
+          ".html",
+          ".css",
+          ".xml",
+          ".yaml",
+          ".yml",
+          ".csv",
+          ".log",
+        ];
         const fileExt = path.extname(resolvedFilePath).toLowerCase();
-        
+
         if (!textExtensions.includes(fileExt)) {
           return { success: false, error: `Unsupported file type: ${fileExt}` };
         }
 
-        const content = await fs.readFile(resolvedFilePath, 'utf-8');
+        const content = await fs.readFile(resolvedFilePath, "utf-8");
         const relativePath = path.relative(projectRoot, resolvedFilePath);
-        
-        return { 
-          success: true, 
+
+        return {
+          success: true,
           data: {
             content,
             fileName: path.basename(resolvedFilePath),
             relativePath,
             size: stats.size,
-            extension: fileExt
-          }
+            extension: fileExt,
+          },
         };
       } catch (error) {
         return { success: false, error: (error as Error).message };
@@ -820,7 +846,9 @@ class BitcaveApp {
       async (event, data: IPCEventData<"artifact:create">) => {
         try {
           if (!this.artifactManager) {
-            throw new Error("Artifact manager not initialized - no project open");
+            throw new Error(
+              "Artifact manager not initialized - no project open"
+            );
           }
           const artifact = await this.artifactManager.createArtifact(data);
           return { success: true, data: artifact };
@@ -835,7 +863,9 @@ class BitcaveApp {
       async (event, data: IPCEventData<"artifact:update">) => {
         try {
           if (!this.artifactManager) {
-            throw new Error("Artifact manager not initialized - no project open");
+            throw new Error(
+              "Artifact manager not initialized - no project open"
+            );
           }
           const artifact = await this.artifactManager.updateArtifact(
             data.artifactId,
@@ -853,7 +883,9 @@ class BitcaveApp {
       async (event, data: IPCEventData<"artifact:get-data">) => {
         try {
           if (!this.artifactManager) {
-            throw new Error("Artifact manager not initialized - no project open");
+            throw new Error(
+              "Artifact manager not initialized - no project open"
+            );
           }
           const artifactData = await this.artifactManager.getArtifactData(
             data.artifactId,
@@ -871,7 +903,9 @@ class BitcaveApp {
       async (event, data: IPCEventData<"artifact:set-data">) => {
         try {
           if (!this.artifactManager) {
-            throw new Error("Artifact manager not initialized - no project open");
+            throw new Error(
+              "Artifact manager not initialized - no project open"
+            );
           }
           await this.artifactManager.setArtifactData(
             data.artifactId,
@@ -890,7 +924,9 @@ class BitcaveApp {
       async (event, data: IPCEventData<"artifact:destroy">) => {
         try {
           if (!this.artifactManager) {
-            throw new Error("Artifact manager not initialized - no project open");
+            throw new Error(
+              "Artifact manager not initialized - no project open"
+            );
           }
           await this.artifactManager.destroyArtifact(data.artifactId);
           return { success: true };
@@ -906,7 +942,9 @@ class BitcaveApp {
       async (event, data: { artifactId: string; name?: string }) => {
         try {
           if (!this.artifactManager) {
-            throw new Error("Artifact manager not initialized - no project open");
+            throw new Error(
+              "Artifact manager not initialized - no project open"
+            );
           }
           await this.artifactManager.saveArtifactGlobally(
             data.artifactId,
@@ -924,7 +962,8 @@ class BitcaveApp {
         if (!this.artifactManager) {
           throw new Error("Artifact manager not initialized - no project open");
         }
-        const globalArtifacts = await this.artifactManager.loadGlobalArtifacts();
+        const globalArtifacts =
+          await this.artifactManager.loadGlobalArtifacts();
         return { success: true, data: globalArtifacts };
       } catch (error) {
         return { success: false, error: (error as Error).message };
@@ -936,7 +975,9 @@ class BitcaveApp {
       async (event, data: { globalArtifactId: string }) => {
         try {
           if (!this.artifactManager) {
-            throw new Error("Artifact manager not initialized - no project open");
+            throw new Error(
+              "Artifact manager not initialized - no project open"
+            );
           }
           const artifact = await this.artifactManager.importGlobalArtifact(
             data.globalArtifactId
@@ -951,8 +992,14 @@ class BitcaveApp {
     // Memory management handlers
     ipcMain.handle("memory:get-facts", async () => {
       try {
+        if (!this.memoryService || !this.memoryService.isDatabaseAvailable()) {
+          return { success: false, error: "Memory service not available" };
+        }
+
         const db = this.memoryService.getDatabase();
-        const facts = db.prepare('SELECT * FROM facts ORDER BY updated_at DESC').all();
+        const facts = db
+          .prepare("SELECT * FROM facts ORDER BY updated_at DESC")
+          .all();
         return { success: true, data: facts };
       } catch (error) {
         return { success: false, error: (error as Error).message };
@@ -961,15 +1008,31 @@ class BitcaveApp {
 
     ipcMain.handle("memory:get-stats", async () => {
       try {
+        if (!this.memoryService || !this.memoryService.isDatabaseAvailable()) {
+          return { success: false, error: "Memory service not available" };
+        }
+
         const db = this.memoryService.getDatabase();
-        
-        const totalFacts = db.prepare('SELECT COUNT(*) as count FROM facts').get() as { count: number };
-        const avgConfidence = db.prepare('SELECT AVG(confidence) as avg FROM facts').get() as { avg: number };
-        const categoryCounts = db.prepare('SELECT category, COUNT(*) as count FROM facts GROUP BY category').all() as { category: string; count: number }[];
-        
+
+        const totalFacts = db
+          .prepare("SELECT COUNT(*) as count FROM facts")
+          .get() as { count: number };
+        const avgConfidence = db
+          .prepare("SELECT AVG(confidence) as avg FROM facts")
+          .get() as { avg: number };
+        const categoryCounts = db
+          .prepare(
+            "SELECT category, COUNT(*) as count FROM facts GROUP BY category"
+          )
+          .all() as { category: string; count: number }[];
+
         // Recent facts (last 7 days)
-        const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-        const recentFacts = db.prepare('SELECT COUNT(*) as count FROM facts WHERE updated_at > ?').get(sevenDaysAgo) as { count: number };
+        const sevenDaysAgo = new Date(
+          Date.now() - 7 * 24 * 60 * 60 * 1000
+        ).toISOString();
+        const recentFacts = db
+          .prepare("SELECT COUNT(*) as count FROM facts WHERE updated_at > ?")
+          .get(sevenDaysAgo) as { count: number };
 
         const stats = {
           totalFacts: totalFacts.count,
@@ -978,7 +1041,7 @@ class BitcaveApp {
           categoryCounts: categoryCounts.reduce((acc, row) => {
             acc[row.category] = row.count;
             return acc;
-          }, {} as { [key: string]: number })
+          }, {} as { [key: string]: number }),
         };
 
         return { success: true, data: stats };
@@ -987,32 +1050,74 @@ class BitcaveApp {
       }
     });
 
-    ipcMain.handle("memory:delete-fact", async (event, data: { factId: number }) => {
-      try {
-        await this.memoryService.deleteFact(data.factId);
-        return { success: true };
-      } catch (error) {
-        return { success: false, error: (error as Error).message };
-      }
-    });
+    ipcMain.handle(
+      "memory:delete-fact",
+      async (event, data: { factId: number }) => {
+        try {
+          if (
+            !this.memoryService ||
+            !this.memoryService.isDatabaseAvailable()
+          ) {
+            return { success: false, error: "Memory service not available" };
+          }
 
-    ipcMain.handle("memory:update-fact", async (event, data: { factId: number; content?: string; category?: string; confidence?: number; updated_at?: string }) => {
-      try {
-        await this.memoryService.updateFact(data.factId, data);
-        return { success: true };
-      } catch (error) {
-        return { success: false, error: (error as Error).message };
+          await this.memoryService.deleteFact(data.factId);
+          return { success: true };
+        } catch (error) {
+          return { success: false, error: (error as Error).message };
+        }
       }
-    });
+    );
 
-    ipcMain.handle("memory:search-facts", async (event, data: { query: string; limit?: number }) => {
-      try {
-        const results = await this.memoryService.searchFacts(data.query, data.limit || 10);
-        return { success: true, data: results };
-      } catch (error) {
-        return { success: false, error: (error as Error).message };
+    ipcMain.handle(
+      "memory:update-fact",
+      async (
+        event,
+        data: {
+          factId: number;
+          content?: string;
+          category?: string;
+          confidence?: number;
+          updated_at?: string;
+        }
+      ) => {
+        try {
+          if (
+            !this.memoryService ||
+            !this.memoryService.isDatabaseAvailable()
+          ) {
+            return { success: false, error: "Memory service not available" };
+          }
+
+          await this.memoryService.updateFact(data.factId, data);
+          return { success: true };
+        } catch (error) {
+          return { success: false, error: (error as Error).message };
+        }
       }
-    });
+    );
+
+    ipcMain.handle(
+      "memory:search-facts",
+      async (event, data: { query: string; limit?: number }) => {
+        try {
+          if (
+            !this.memoryService ||
+            !this.memoryService.isDatabaseAvailable()
+          ) {
+            return { success: false, error: "Memory service not available" };
+          }
+
+          const results = await this.memoryService.searchFacts(
+            data.query,
+            data.limit || 10
+          );
+          return { success: true, data: results };
+        } catch (error) {
+          return { success: false, error: (error as Error).message };
+        }
+      }
+    );
   }
 
   public getMainWindow(): BrowserWindow | null {
