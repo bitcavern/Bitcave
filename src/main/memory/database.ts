@@ -1,11 +1,20 @@
 import Database from 'better-sqlite3';
+import * as path from 'path';
+import * as os from 'os';
+import * as fs from 'fs';
 
-const DB_PATH = '~/.bitcave/memory/user_memory.db';
+const DB_PATH = path.join(os.homedir(), '.bitcave', 'memory', 'user_memory.db');
 
 let db: Database.Database;
 
 export function getDb() {
   if (!db) {
+    // Ensure directory exists
+    const dbDir = path.dirname(DB_PATH);
+    if (!fs.existsSync(dbDir)) {
+      fs.mkdirSync(dbDir, { recursive: true });
+    }
+    
     db = new Database(DB_PATH, { verbose: console.log });
     setupDatabase();
   }
@@ -18,10 +27,35 @@ function setupDatabase() {
   db.pragma('synchronous = NORMAL');
   db.pragma('temp_store = MEMORY');
 
-  // Load sqlite-vec extension
-  // IMPORTANT: The path to the extension must be correct
-  // You may need to adjust this based on your build process
-  db.loadExtension('./node_modules/sqlite-vec/vec.dylib');
+  try {
+    // Load sqlite-vec extension
+    // Try different possible paths for the extension
+    const possiblePaths = [
+      './node_modules/sqlite-vec/vec.dylib',
+      path.join(__dirname, '../../node_modules/sqlite-vec/vec.dylib'),
+      path.join(process.cwd(), 'node_modules/sqlite-vec/vec.dylib')
+    ];
+    
+    let extensionLoaded = false;
+    for (const extensionPath of possiblePaths) {
+      try {
+        if (fs.existsSync(extensionPath)) {
+          db.loadExtension(extensionPath);
+          extensionLoaded = true;
+          console.log('[MemoryDB] Loaded sqlite-vec extension from:', extensionPath);
+          break;
+        }
+      } catch (error) {
+        console.warn('[MemoryDB] Failed to load extension from:', extensionPath, error);
+      }
+    }
+    
+    if (!extensionLoaded) {
+      console.warn('[MemoryDB] sqlite-vec extension not found. Memory system may not work properly.');
+    }
+  } catch (error) {
+    console.error('[MemoryDB] Failed to load sqlite-vec extension:', error);
+  }
 
   // Create tables if they don't exist
   const createTables = db.transaction(() => {

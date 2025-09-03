@@ -1,19 +1,14 @@
 import { ConversationMessage } from './types';
 import { MemoryService } from './memory-service';
-
-// This is a placeholder for the actual AI service
-const aiService = {
-  processPrompt: async (prompt: string) => {
-    console.log('AI Service processing prompt:', prompt);
-    return '[{"fact": "Teddy is a good boy", "category": "personal"}]';
-  }
-};
+import { AIService } from '../ai/ai-service';
 
 export class FactExtractor {
   private memoryService: MemoryService;
+  private aiService: AIService;
 
-  constructor(memoryService: MemoryService) {
+  constructor(memoryService: MemoryService, aiService: AIService) {
     this.memoryService = memoryService;
+    this.aiService = aiService;
   }
 
   public async extractFacts(messages: ConversationMessage[], conversationId: string): Promise<void> {
@@ -27,4 +22,53 @@ export class FactExtractor {
       - professional (job, skills, projects)
       - interests (hobbies, topics)
 
-      Format: [{
+      Format: [{"content": "fact text", "category": "personal|preferences|professional|interests"}]
+
+      Context:
+      ${context}
+    `;
+
+    try {
+      const response = await this.aiService.processPrompt(prompt);
+      const facts = JSON.parse(response.trim());
+      
+      // Process and store facts with deduplication
+      for (const factData of facts) {
+        if (!factData.content || !factData.category) continue;
+        
+        // Check for similar existing facts
+        const similarFacts = await this.memoryService.searchFacts(factData.content, 3);
+        const isDuplicate = similarFacts.some(existing => existing.distance < 0.3); // High similarity threshold
+        
+        if (!isDuplicate) {
+          await this.memoryService.addFact({
+            content: factData.content,
+            category: factData.category,
+            confidence: 1.0,
+            source_conversation_id: conversationId,
+            project_id: null
+          });
+        } else {
+          // Update confidence of existing similar fact
+          const mostSimilar = similarFacts[0];
+          if (mostSimilar) {
+            await this.memoryService.updateFact(mostSimilar.id, {
+              confidence: Math.min(mostSimilar.confidence + 0.1, 2.0),
+              updated_at: new Date().toISOString()
+            });
+          }
+        }
+      }
+      
+      // Mark messages as processed
+      const messageIds = messages.map(m => m.id);
+      for (const messageId of messageIds) {
+        const db = require('./database').getDb();
+        db.prepare('UPDATE conversation_messages SET processed_for_facts = 1 WHERE id = ?').run(messageId);
+      }
+      
+    } catch (error) {
+      console.error('[FactExtractor] Error extracting facts:', error);
+    }
+  }
+}

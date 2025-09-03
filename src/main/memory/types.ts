@@ -7,6 +7,7 @@ export interface Fact {
   updated_at: string;
   source_conversation_id: string;
   project_id?: string;
+  vec_id: number;
   embedding?: Float32Array;
 }
 

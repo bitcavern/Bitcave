@@ -9,6 +9,7 @@ import { WebviewManager } from "./webview-manager";
 import { ProjectManager } from "./projects/project-manager";
 import { ArtifactManager } from "./artifacts/artifact-manager";
 import { UserManager } from "./user/user-manager";
+import { MemoryService } from "./memory/memory-service";
 import type {
   IPCEventName,
   IPCEventData,
@@ -26,6 +27,7 @@ class BitcaveApp {
   private webviewManager: WebviewManager;
   private projectManager: ProjectManager;
   private userManager: UserManager;
+  private memoryService: MemoryService;
   private artifactManager: ArtifactManager | null = null;
   private selectedWindowId: string | null = null;
 
@@ -36,6 +38,8 @@ class BitcaveApp {
     this.webviewManager = new WebviewManager();
     this.projectManager = new ProjectManager();
     this.userManager = new UserManager();
+    this.memoryService = new MemoryService(this.aiService);
+    this.aiService.setMemoryService(this.memoryService);
 
     // Initialize with environment API key if available
     const envApiKey = process.env.OPENROUTER_API_KEY;
@@ -943,6 +947,72 @@ class BitcaveApp {
         }
       }
     );
+
+    // Memory management handlers
+    ipcMain.handle("memory:get-facts", async () => {
+      try {
+        const db = this.memoryService.getDatabase();
+        const facts = db.prepare('SELECT * FROM facts ORDER BY updated_at DESC').all();
+        return { success: true, data: facts };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    });
+
+    ipcMain.handle("memory:get-stats", async () => {
+      try {
+        const db = this.memoryService.getDatabase();
+        
+        const totalFacts = db.prepare('SELECT COUNT(*) as count FROM facts').get() as { count: number };
+        const avgConfidence = db.prepare('SELECT AVG(confidence) as avg FROM facts').get() as { avg: number };
+        const categoryCounts = db.prepare('SELECT category, COUNT(*) as count FROM facts GROUP BY category').all() as { category: string; count: number }[];
+        
+        // Recent facts (last 7 days)
+        const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+        const recentFacts = db.prepare('SELECT COUNT(*) as count FROM facts WHERE updated_at > ?').get(sevenDaysAgo) as { count: number };
+
+        const stats = {
+          totalFacts: totalFacts.count,
+          averageConfidence: avgConfidence.avg || 0,
+          recentFacts: recentFacts.count,
+          categoryCounts: categoryCounts.reduce((acc, row) => {
+            acc[row.category] = row.count;
+            return acc;
+          }, {} as { [key: string]: number })
+        };
+
+        return { success: true, data: stats };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    });
+
+    ipcMain.handle("memory:delete-fact", async (event, data: { factId: number }) => {
+      try {
+        await this.memoryService.deleteFact(data.factId);
+        return { success: true };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    });
+
+    ipcMain.handle("memory:update-fact", async (event, data: { factId: number; content?: string; category?: string; confidence?: number; updated_at?: string }) => {
+      try {
+        await this.memoryService.updateFact(data.factId, data);
+        return { success: true };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    });
+
+    ipcMain.handle("memory:search-facts", async (event, data: { query: string; limit?: number }) => {
+      try {
+        const results = await this.memoryService.searchFacts(data.query, data.limit || 10);
+        return { success: true, data: results };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    });
   }
 
   public getMainWindow(): BrowserWindow | null {

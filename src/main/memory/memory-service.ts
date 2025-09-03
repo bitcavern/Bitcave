@@ -3,16 +3,17 @@ import { Fact, Conversation, ConversationMessage } from './types';
 import { v4 as uuidv4 } from 'uuid';
 import { EmbeddingService } from './embedding-service';
 import { FactExtractor } from './fact-extractor';
+import { AIService } from '../ai/ai-service';
 
 export class MemoryService {
   private db;
   private embeddingService: EmbeddingService;
   private factExtractor: FactExtractor;
 
-  constructor() {
+  constructor(aiService: AIService) {
     this.db = getDb();
     this.embeddingService = new EmbeddingService();
-    this.factExtractor = new FactExtractor(this);
+    this.factExtractor = new FactExtractor(this, aiService);
     this.initialize();
   }
 
@@ -151,6 +152,16 @@ export class MemoryService {
   }
 
   public async updateFact(id: number, updates: Partial<Fact>): Promise<void> {
+    // If updating content, need to regenerate embedding
+    if (updates.content) {
+      const fact = await this.getFact(id);
+      if (fact) {
+        const embedding = await this.embeddingService.generateEmbedding(updates.content);
+        // Update vector table
+        this.db.prepare('UPDATE vec_facts SET fact_embedding = ? WHERE rowid = ?').run(embedding, fact.vec_id);
+      }
+    }
+
     const fields = Object.keys(updates).map(key => `${key} = ?`).join(', ');
     const values = Object.values(updates);
     const stmt = this.db.prepare(`UPDATE facts SET ${fields} WHERE id = ?`);
@@ -158,8 +169,20 @@ export class MemoryService {
   }
 
   public async deleteFact(id: number): Promise<void> {
+    // Get fact to find associated vector
+    const fact = await this.getFact(id);
+    if (fact && fact.vec_id) {
+      // Delete from vector table first
+      this.db.prepare('DELETE FROM vec_facts WHERE rowid = ?').run(fact.vec_id);
+    }
+    
+    // Delete from facts table
     const stmt = this.db.prepare('DELETE FROM facts WHERE id = ?');
     stmt.run(id);
+  }
+
+  public getDatabase() {
+    return this.db;
   }
 
 }

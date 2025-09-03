@@ -7,6 +7,7 @@ import {
   Settings,
   LayoutGrid,
   Globe,
+  Brain,
 } from "lucide-react";
 import type { CanvasState, WindowType, BaseWindow } from "@/shared/types";
 import { WINDOW_CONFIGS } from "@/shared/constants";
@@ -15,6 +16,7 @@ import { GlobalArtifactsModal } from "./GlobalArtifactsModal";
 interface ToolbarProps {
   onCreateWindow: (type: WindowType) => void;
   onSettingsClick: () => void; // Added for settings modal
+  onMemoryClick: () => void; // Added for memory modal
   selectedWindowId: string | null;
   windowCount: number;
   canvasState: CanvasState;
@@ -30,6 +32,7 @@ interface ToolbarProps {
 export const Toolbar: React.FC<ToolbarProps> = ({
   onCreateWindow,
   onSettingsClick, // Added for settings modal
+  onMemoryClick, // Added for memory modal
   selectedWindowId,
   windowCount: _windowCount,
   canvasState: _canvasState,
@@ -562,6 +565,35 @@ export const Toolbar: React.FC<ToolbarProps> = ({
         >
           <Settings size={14} />
           <span>Settings</span>
+        </button>
+
+        {/* Memory Button */}
+        <button
+          onClick={onMemoryClick}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "6px",
+            padding: "6px 10px",
+            backgroundColor: "#374151",
+            color: "white",
+            border: "none",
+            borderRadius: "6px",
+            cursor: "pointer",
+            fontSize: "12px",
+            fontWeight: "500",
+            transition: "all 0.2s",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = "#4b5563";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = "#374151";
+          }}
+          title="Manage AI memory"
+        >
+          <Brain size={14} />
+          <span>Memory</span>
         </button>
 
         {/* Bit Status Indicator */}

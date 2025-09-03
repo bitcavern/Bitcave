@@ -1,4 +1,7 @@
 import { AILogger } from "./logger";
+import * as dotenv from 'dotenv';
+
+dotenv.config();
 
 export interface OpenRouterMessage {
   role: "system" | "user" | "assistant" | "tool";
@@ -65,9 +68,7 @@ export interface OpenRouterResponse {
 export class OpenRouterClient {
   private apiKey: string;
   private baseUrl = "https://openrouter.ai/api/v1";
-  // private defaultModel = "z-ai/glm-4.5-air:free";
-  // private defaultModel = "x-ai/grok-code-fast-1";
-  private defaultModel = "anthropic/claude-sonnet-4";
+  private defaultModel = process.env.OPENROUTER_DEFAULT_MODEL || "anthropic/claude-sonnet-4";
   private logger?: AILogger;
 
   constructor(apiKey: string) {

@@ -7,6 +7,7 @@ import { LeftSidebar } from "./components/LeftSidebar";
 import { ProjectLauncher } from "./components/ProjectLauncher";
 import { ProjectIndicator } from "./components/ProjectIndicator";
 import { SettingsModal } from "./components/SettingsModal"; // Added for settings
+import { MemoryModal } from "./components/MemoryModal"; // Added for memory management
 import type {
   BaseWindow,
   CanvasState,
@@ -36,6 +37,7 @@ export const App: React.FC = () => {
   const [leftSidebarVisible, setLeftSidebarVisible] = useState(false);
   const [leftSidebarWidth, setLeftSidebarWidth] = useState(400);
   const [isSettingsModalOpen, setSettingsModalOpen] = useState(false); // Added for settings
+  const [isMemoryModalOpen, setMemoryModalOpen] = useState(false); // Added for memory management
 
   // Code execution function
   const executeCode = async (
@@ -445,6 +447,7 @@ export const App: React.FC = () => {
         onToggleLeftSidebar={() => setLeftSidebarVisible(!leftSidebarVisible)}
         leftSidebarWidth={leftSidebarWidth}
         onSettingsClick={() => setSettingsModalOpen(true)} // Added for settings
+        onMemoryClick={() => setMemoryModalOpen(true)} // Added for memory management
       />
 
       <LeftSidebar
@@ -496,6 +499,12 @@ export const App: React.FC = () => {
       <SettingsModal 
         isOpen={isSettingsModalOpen} 
         onClose={() => setSettingsModalOpen(false)} 
+      />
+
+      {/* Memory Modal */}
+      <MemoryModal 
+        isOpen={isMemoryModalOpen} 
+        onClose={() => setMemoryModalOpen(false)} 
       />
 
     </div>

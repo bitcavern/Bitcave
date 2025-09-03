@@ -8,6 +8,7 @@ import { AIToolRegistry } from "../ai-tools/registry";
 import { getOpenRouterToolDefinitions } from "../ai-tools/tool-definitions";
 import type { WindowManager } from "../window-manager";
 import { AILogger } from "./logger";
+import { MemoryService } from "../memory/memory-service";
 
 export interface AIConversation {
   id: string;
@@ -24,6 +25,7 @@ export class AIService {
   private logger: AILogger;
   private abortControllers: Map<string, AbortController> = new Map();
   private pendingInlineExecutions: Map<string, any> = new Map(); // Track inline executions per conversation
+  private memoryService: MemoryService | null = null;
 
   constructor(toolRegistry: AIToolRegistry, windowManager: WindowManager) {
     this.toolRegistry = toolRegistry;
@@ -34,6 +36,10 @@ export class AIService {
   setApiKey(apiKey: string) {
     this.client = new OpenRouterClient(apiKey);
     this.client.setLogger(this.logger);
+  }
+
+  setMemoryService(memoryService: MemoryService) {
+    this.memoryService = memoryService;
   }
 
   isConfigured(): boolean {
@@ -73,6 +79,11 @@ export class AIService {
         content: userMessage,
       });
 
+      // Store message in memory system for fact extraction
+      if (this.memoryService) {
+        await this.memoryService.addMessageToConversation(conversationId, "user", userMessage);
+      }
+
       // Create abort controller for this conversation
       const controller = new AbortController();
       this.abortControllers.set(conversationId, controller);
@@ -103,10 +114,18 @@ export class AIService {
       if (abortSignal.aborted) {
         throw new Error("Request aborted");
       }
-      // Create context message
+      // Create context message with memory context
+      let contextContent = this.buildWindowContextMessage();
+      if (this.memoryService) {
+        const memoryContext = await this.buildMemoryContext(conversation.messages);
+        if (memoryContext) {
+          contextContent += "\n\n" + memoryContext;
+        }
+      }
+
       const contextMessage: OpenRouterMessage = {
         role: "system",
-        content: this.buildWindowContextMessage(),
+        content: contextContent,
       };
 
       // Prepare request
@@ -193,6 +212,12 @@ export class AIService {
 
         conversation.messages.push(assistantMessage);
         conversation.updatedAt = new Date();
+
+        // Store assistant message in memory system
+        if (this.memoryService) {
+          await this.memoryService.addMessageToConversation(conversationId, "assistant", content);
+        }
+
         return {
           content,
           inlineExecution: inlineExecution || undefined
@@ -547,6 +572,66 @@ export class AIService {
     };
   }
 
+  private async buildMemoryContext(messages: OpenRouterMessage[]): Promise<string | null> {
+    if (!this.memoryService || messages.length === 0) {
+      return null;
+    }
+
+    // Get recent user messages for context search
+    const recentUserMessages = messages
+      .filter(m => m.role === "user")
+      .slice(-3) // Last 3 user messages
+      .map(m => m.content)
+      .join(" ");
+
+    if (!recentUserMessages.trim()) {
+      return null;
+    }
+
+    try {
+      // Search for relevant facts
+      const relevantFacts = await this.memoryService.searchFacts(recentUserMessages, 8);
+      
+      if (relevantFacts.length === 0) {
+        return null;
+      }
+
+      // Filter facts by similarity threshold and apply recency boost
+      const filteredFacts = relevantFacts
+        .filter(fact => fact.distance < 0.7) // Similarity threshold
+        .map(fact => {
+          // Apply recency boost
+          const ageInDays = (Date.now() - new Date(fact.updated_at).getTime()) / (1000 * 60 * 60 * 24);
+          const recencyMultiplier = Math.max(0.5, 1 - (ageInDays / 30)); // Decay over 30 days
+          return {
+            ...fact,
+            relevanceScore: (1 - fact.distance) * recencyMultiplier * fact.confidence
+          };
+        })
+        .sort((a, b) => b.relevanceScore - a.relevanceScore)
+        .slice(0, 5); // Top 5 most relevant
+
+      if (filteredFacts.length === 0) {
+        return null;
+      }
+
+      // Build context string
+      let context = "USER MEMORY CONTEXT:\n";
+      context += "The following information about the user may be relevant to this conversation:\n\n";
+      
+      filteredFacts.forEach((fact, index) => {
+        context += `${index + 1}. ${fact.content} (${fact.category}, confidence: ${fact.confidence.toFixed(1)})\n`;
+      });
+      
+      context += "\nUse this information appropriately to provide more personalized and contextual responses.";
+      
+      return context;
+    } catch (error) {
+      console.error('[AIService] Error building memory context:', error);
+      return null;
+    }
+  }
+
   private buildWindowContextMessage(): string {
     const windows = this.windowManager.getAllWindows();
 
@@ -674,5 +759,19 @@ export class AIService {
       controller.abort();
       this.abortControllers.delete(conversationId);
     }
+  }
+
+  async processPrompt(prompt: string, model?: string): Promise<string> {
+    if (!this.client) {
+      throw new Error("AI service not configured. Please set an API key.");
+    }
+
+    const request: OpenRouterRequest = {
+      messages: [{ role: "user", content: prompt }],
+      model: model || process.env.FACT_EXTRACTION_MODEL || this.client.defaultModel,
+    };
+
+    const response = await this.client.createChatCompletion(request);
+    return response.choices[0].message.content || "";
   }
 }
