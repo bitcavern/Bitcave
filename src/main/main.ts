@@ -404,6 +404,38 @@ class BitcaveApp {
     );
 
     ipcMain.handle(
+      "ai:chat-stream",
+      async (
+        event,
+        { conversationId, message }: { conversationId: string; message: string }
+      ) => {
+        console.log(`[Main IPC] ai:chat-stream called for conversation: ${conversationId}`);
+        try {
+          const result = await this.aiService.chatStream(
+            conversationId,
+            message,
+            (delta: string) => {
+              try {
+                console.log(`[Main IPC] Sending delta: "${delta}" (${delta.length} chars)`);
+                event.sender.send("ai:chat-stream-delta", {
+                  conversationId,
+                  delta,
+                });
+              } catch (err) {
+                console.warn("[Main] Failed sending stream delta:", err);
+              }
+            }
+          );
+          console.log(`[Main IPC] ai:chat-stream completed, returning result`);
+          return { success: true, data: result };
+        } catch (error) {
+          console.error(`[Main IPC] ai:chat-stream error:`, error);
+          return { success: false, error: (error as Error).message };
+        }
+      }
+    );
+
+    ipcMain.handle(
       "ai:abort",
       async (event, { conversationId }: { conversationId: string }) => {
         try {
@@ -446,6 +478,42 @@ class BitcaveApp {
       try {
         const newConversationId = this.aiService.createNewConversation();
         return { success: true, data: newConversationId };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    });
+
+    ipcMain.handle("ai:get-conversations", async () => {
+      try {
+        if (!this.memoryService || !this.memoryService.isDatabaseAvailable()) {
+          // Fallback to in-memory conversations if database not available
+          const conversations = this.aiService.getConversations();
+          return { success: true, data: conversations };
+        }
+        
+        // Get conversations from database which has proper titles and dates
+        const db = this.memoryService.getDatabase();
+        if (!db) {
+          return { success: false, error: "Database not available" };
+        }
+        
+        const conversations = db.prepare(
+          "SELECT id, title, created_at, updated_at, message_count FROM conversations ORDER BY updated_at DESC"
+        ).all();
+        
+        return { success: true, data: conversations };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    });
+
+    ipcMain.handle("ai:get-conversation-messages", async (event, { conversationId }: { conversationId: string }) => {
+      try {
+        if (!this.memoryService || !this.memoryService.isDatabaseAvailable()) {
+          return { success: false, error: "Memory service not available" };
+        }
+        const messages = await this.memoryService.getMessagesForConversation(conversationId);
+        return { success: true, data: messages };
       } catch (error) {
         return { success: false, error: (error as Error).message };
       }
@@ -997,6 +1065,9 @@ class BitcaveApp {
         }
 
         const db = this.memoryService.getDatabase();
+        if (!db) {
+          return { success: false, error: "Database not available" };
+        }
         const facts = db
           .prepare("SELECT * FROM facts ORDER BY updated_at DESC")
           .all();
@@ -1013,6 +1084,9 @@ class BitcaveApp {
         }
 
         const db = this.memoryService.getDatabase();
+        if (!db) {
+          return { success: false, error: "Database not available" };
+        }
 
         const totalFacts = db
           .prepare("SELECT COUNT(*) as count FROM facts")

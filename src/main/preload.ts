@@ -18,6 +18,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.on(channel, callback);
   },
 
+  off: (channel: string, callback: (event: any, ...args: any[]) => void) => {
+    ipcRenderer.removeListener(channel, callback);
+  },
+
   // Remove event listeners
   removeAllListeners: (channel: string) => {
     ipcRenderer.removeAllListeners(channel);
@@ -34,6 +38,10 @@ declare global {
       ) => Promise<any>;
       invokeSimple: (channel: string) => Promise<any>;
       on: (
+        channel: string,
+        callback: (event: any, ...args: any[]) => void
+      ) => void;
+      off: (
         channel: string,
         callback: (event: any, ...args: any[]) => void
       ) => void;

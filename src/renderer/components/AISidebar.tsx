@@ -1,6 +1,11 @@
 import React, { useState, useRef, useEffect } from "react";
 import type { ReactNode } from "react";
-import type { BaseWindow, ChatMessage, InlineExecution, FileReference } from "@/shared/types";
+import type {
+  BaseWindow,
+  ChatMessage,
+  InlineExecution,
+  FileReference,
+} from "@/shared/types";
 import { InlineExecution as InlineExecutionComponent } from "./InlineExecution";
 import { FilePicker } from "./FilePicker";
 import { Paperclip, X, File } from "lucide-react";
@@ -22,12 +27,21 @@ const MessageWithHover: React.FC<MessageWithHoverProps> = ({
 
   const handleCreateCodeWindow = () => {
     if (message.inlineExecution?.data) {
-      console.log('Frontend: Creating code window with execution ID:', message.inlineExecution.data.executionId);
-      console.log('Frontend: Full inline execution data:', message.inlineExecution.data);
+      console.log(
+        "Frontend: Creating code window with execution ID:",
+        message.inlineExecution.data.executionId
+      );
+      console.log(
+        "Frontend: Full inline execution data:",
+        message.inlineExecution.data
+      );
       onCreateCodeWindow(message.inlineExecution.data.executionId);
     } else {
-      console.log('Frontend: No inline execution data found in message');
-      console.log('Frontend: Available inlineExecution:', message.inlineExecution);
+      console.log("Frontend: No inline execution data found in message");
+      console.log(
+        "Frontend: Available inlineExecution:",
+        message.inlineExecution
+      );
     }
   };
 
@@ -68,10 +82,10 @@ const MessageWithHover: React.FC<MessageWithHoverProps> = ({
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >
-      <div style={{ overflowX: "auto", paddingBottom: '16px' }}>
+      <div style={{ overflowX: "auto", paddingBottom: "16px" }}>
         {renderFormattedMessage(message.content)}
       </div>
-      
+
       {/* Small Icon Button Below Message */}
       {showMenu && message.inlineExecution?.data && (
         <button
@@ -99,7 +113,8 @@ const MessageWithHover: React.FC<MessageWithHoverProps> = ({
           }}
           onMouseEnter={(e) => {
             e.currentTarget.style.transform = "scale(1.1)";
-            e.currentTarget.style.boxShadow = "0 4px 12px rgba(59, 130, 246, 0.4)";
+            e.currentTarget.style.boxShadow =
+              "0 4px 12px rgba(59, 130, 246, 0.4)";
             // Keep menu visible when hovering the button and clear any hide timeout
             if (hoverTimeout) {
               clearTimeout(hoverTimeout);
@@ -109,7 +124,8 @@ const MessageWithHover: React.FC<MessageWithHoverProps> = ({
           }}
           onMouseLeave={(e) => {
             e.currentTarget.style.transform = "scale(1)";
-            e.currentTarget.style.boxShadow = "0 2px 8px rgba(59, 130, 246, 0.3)";
+            e.currentTarget.style.boxShadow =
+              "0 2px 8px rgba(59, 130, 246, 0.3)";
             // Start the hide timeout when leaving the button
             handleMouseLeave();
           }}
@@ -142,7 +158,6 @@ interface AISidebarProps {
   onCreateTextWindow: (label: string, content?: string) => void;
   onWidthChange?: (width: number) => void;
 }
-
 
 interface APIKeyModalProps {
   isOpen: boolean;
@@ -479,7 +494,9 @@ export const AISidebar: React.FC<AISidebarProps> = ({
   const [isProcessing, setIsProcessing] = useState(false);
   const [isConfigured, setIsConfigured] = useState(false);
   const [showAPIKeyModal, setShowAPIKeyModal] = useState(false);
-  const [conversationId, setConversationId] = useState("main"); // Current conversation ID
+  const [conversationId, setConversationId] = useState(() => 
+    `chat_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+  ); // Current conversation ID
   const [isResizing, setIsResizing] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(380);
   const [abortController, setAbortController] =
@@ -489,6 +506,13 @@ export const AISidebar: React.FC<AISidebarProps> = ({
   const [showMentionDropdown, setShowMentionDropdown] = useState(false);
   const [mentionQuery, setMentionQuery] = useState("");
   const [mentionFiles, setMentionFiles] = useState<any[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
+  const [conversationHistory, setConversationHistory] = useState<Array<{
+    id: string;
+    title: string;
+    lastMessage: Date;
+    messageCount: number;
+  }>>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -497,6 +521,50 @@ export const AISidebar: React.FC<AISidebarProps> = ({
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  const loadConversationHistory = async () => {
+    try {
+      const result = await (window as any).electronAPI.invoke("ai:get-conversations");
+      if (result.success) {
+        console.log("[Frontend] Raw conversation data:", result.data);
+        const conversations = result.data.map((conv: any) => {
+          console.log("[Frontend] Processing conversation:", conv);
+          const processedConv = {
+            id: conv.id,
+            title: conv.title || "New conversation",
+            lastMessage: new Date(conv.updated_at),
+            messageCount: conv.message_count || 0,
+          };
+          console.log("[Frontend] Processed conversation:", processedConv);
+          return processedConv;
+        });
+        setConversationHistory(conversations);
+      }
+    } catch (error) {
+      console.error("Failed to load conversation history:", error);
+    }
+  };
+
+  const loadConversation = async (convId: string) => {
+    try {
+      const result = await (window as any).electronAPI.invoke("ai:get-conversation-messages", { conversationId: convId });
+      if (result.success) {
+        console.log("[Frontend] Raw message data:", result.data);
+        const messages = result.data.map((msg: any) => ({
+          id: `loaded_${msg.id}`,
+          role: msg.role,
+          content: msg.content,
+          timestamp: new Date(msg.timestamp),
+        }));
+        console.log("[Frontend] Processed messages:", messages);
+        setConversationId(convId);
+        setMessages(messages);
+        setShowHistory(false);
+      }
+    } catch (error) {
+      console.error("Failed to load conversation:", error);
+    }
   };
 
   const startNewChat = async () => {
@@ -508,6 +576,7 @@ export const AISidebar: React.FC<AISidebarProps> = ({
         const newConversationId = result.data;
         setConversationId(newConversationId);
         setMessages([]);
+        setShowHistory(false);
 
         // Add welcome message for new conversation
         if (isConfigured) {
@@ -521,6 +590,9 @@ export const AISidebar: React.FC<AISidebarProps> = ({
             },
           ]);
         }
+        
+        // Refresh conversation history
+        await loadConversationHistory();
       }
     } catch (error) {
       console.error("Failed to start new chat:", error);
@@ -613,19 +685,22 @@ export const AISidebar: React.FC<AISidebarProps> = ({
   // Handle clicking outside to close mention dropdown
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (showMentionDropdown && textareaRef.current && 
-          !textareaRef.current.contains(event.target as Node)) {
+      if (
+        showMentionDropdown &&
+        textareaRef.current &&
+        !textareaRef.current.contains(event.target as Node)
+      ) {
         setShowMentionDropdown(false);
         setMentionQuery("");
       }
     };
 
     if (showMentionDropdown) {
-      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener("mousedown", handleClickOutside);
     }
 
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener("mousedown", handleClickOutside);
     };
   }, [showMentionDropdown]);
 
@@ -653,18 +728,18 @@ export const AISidebar: React.FC<AISidebarProps> = ({
 
   const loadMentionFiles = async () => {
     try {
-      const result = await (window as any).electronAPI.invoke('files:list');
+      const result = await (window as any).electronAPI.invoke("files:list");
       if (result.success) {
         setMentionFiles(result.data || []);
       }
     } catch (error) {
-      console.error('Failed to load files for mentions:', error);
+      console.error("Failed to load files for mentions:", error);
     }
   };
 
   const flattenFiles = (files: any[]): any[] => {
     const flat: any[] = [];
-    files.forEach(file => {
+    files.forEach((file) => {
       if (!file.isDirectory) {
         flat.push(file);
       }
@@ -675,7 +750,6 @@ export const AISidebar: React.FC<AISidebarProps> = ({
     return flat;
   };
 
-
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const value = e.target.value;
     const cursorPos = e.target.selectionStart;
@@ -684,13 +758,12 @@ export const AISidebar: React.FC<AISidebarProps> = ({
     // Check for @ mentions
     const textBeforeCursor = value.slice(0, cursorPos);
     const atMatch = textBeforeCursor.match(/@([^@\s]*)$/);
-    
-    
+
     if (atMatch) {
       const query = atMatch[1];
       setMentionQuery(query);
       setShowMentionDropdown(true);
-      
+
       // Load files if not already loaded
       if (mentionFiles.length === 0) {
         loadMentionFiles();
@@ -702,39 +775,47 @@ export const AISidebar: React.FC<AISidebarProps> = ({
   };
 
   const handleMentionSelect = async (file: any) => {
-    console.log('handleMentionSelect called with:', file);
-    
+    console.log("handleMentionSelect called with:", file);
+
     try {
       // Read the file
-      console.log('Reading file:', file.path);
-      const result = await (window as any).electronAPI.invoke('files:read', file.path);
-      console.log('File read result:', result);
-      
+      console.log("Reading file:", file.path);
+      const result = await (window as any).electronAPI.invoke(
+        "files:read",
+        file.path
+      );
+      console.log("File read result:", result);
+
       if (result.success) {
         const fileRef: FileReference = result.data;
-        console.log('Adding file to attachedFiles:', fileRef);
-        setAttachedFiles(prev => {
-          console.log('Previous attached files:', prev);
+        console.log("Adding file to attachedFiles:", fileRef);
+        setAttachedFiles((prev) => {
+          console.log("Previous attached files:", prev);
           const newFiles = [...prev, fileRef];
-          console.log('New attached files:', newFiles);
+          console.log("New attached files:", newFiles);
           return newFiles;
         });
-        
+
         // Replace the @mention with just the filename
         const textarea = textareaRef.current;
         if (textarea) {
           const cursorPos = textarea.selectionStart;
           const textBeforeCursor = inputValue.slice(0, cursorPos);
           const textAfterCursor = inputValue.slice(cursorPos);
-          
+
           // Find and replace the @mention
           const atMatch = textBeforeCursor.match(/@([^@\s]*)$/);
           if (atMatch) {
             const newTextBefore = textBeforeCursor.slice(0, -atMatch[0].length);
             const newValue = `${newTextBefore}@${file.name} ${textAfterCursor}`;
-            console.log('Updating input value from:', inputValue, 'to:', newValue);
+            console.log(
+              "Updating input value from:",
+              inputValue,
+              "to:",
+              newValue
+            );
             setInputValue(newValue);
-            
+
             // Set cursor position after the mention
             setTimeout(() => {
               const newCursorPos = newTextBefore.length + file.name.length + 2;
@@ -744,12 +825,12 @@ export const AISidebar: React.FC<AISidebarProps> = ({
           }
         }
       } else {
-        console.error('Failed to read file:', result.error);
+        console.error("Failed to read file:", result.error);
       }
     } catch (error) {
-      console.error('Error selecting mentioned file:', error);
+      console.error("Error selecting mentioned file:", error);
     }
-    
+
     setShowMentionDropdown(false);
     setMentionQuery("");
   };
@@ -764,7 +845,7 @@ export const AISidebar: React.FC<AISidebarProps> = ({
     }
 
     const userMessage: ChatMessage = {
-      id: Date.now().toString(),
+      id: `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       role: "user",
       content: inputValue.trim(),
       timestamp: new Date(),
@@ -784,33 +865,80 @@ export const AISidebar: React.FC<AISidebarProps> = ({
       // Prepare the message with file context
       let messageWithFiles = userMessage.content;
       if (attachedFiles.length > 0) {
-        const fileContext = attachedFiles.map(file => 
-          `\n\n--- File: ${file.fileName} (${file.relativePath}) ---\n${file.content}\n--- End of ${file.fileName} ---`
-        ).join('');
+        const fileContext = attachedFiles
+          .map(
+            (file) =>
+              `\n\n--- File: ${file.fileName} (${file.relativePath}) ---\n${file.content}\n--- End of ${file.fileName} ---`
+          )
+          .join("");
         messageWithFiles = `${userMessage.content}${fileContext}`;
       }
 
-      const result = await window.electronAPI.invoke("ai:chat", {
+      // Prepare a live assistant message placeholder for streaming
+      const liveId = `stream_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: liveId,
+          role: "assistant",
+          content: "Bit is thinking...",
+          timestamp: new Date(),
+          isThinking: true, // Flag to indicate this is a placeholder
+        } as any,
+      ]);
+
+      // Subscribe to stream deltas
+      const onDelta = (
+        _event: any,
+        payload: { conversationId: string; delta: string }
+      ) => {
+        if (payload?.conversationId !== conversationId) return;
+        console.log(`[Frontend] Received delta: "${payload.delta}" (${payload.delta.length} chars)`);
+        setMessages((prev) => {
+          const copy = [...prev];
+          const idx = copy.findIndex((m) => m.id === liveId);
+          if (idx !== -1) {
+            const currentMessage = copy[idx] as any;
+            copy[idx] = {
+              ...currentMessage,
+              content: currentMessage.isThinking ? payload.delta : (currentMessage.content || "") + payload.delta,
+              isThinking: false, // Clear the thinking flag when real content arrives
+            };
+          }
+          return copy;
+        });
+      };
+      window.electronAPI.on("ai:chat-stream-delta", onDelta);
+
+      const result = await window.electronAPI.invoke("ai:chat-stream", {
         conversationId,
         message: messageWithFiles,
       });
 
+      // Unsubscribe
+      window.electronAPI.off("ai:chat-stream-delta", onDelta);
+
       if (result.success) {
-        const responseData = result.data as { content: string; inlineExecution?: any };
-        console.log('AISidebar: Response data received:', responseData);
-        
-        const assistantMessage: ChatMessage = {
-          id: (Date.now() + 1).toString(),
-          role: "assistant",
-          content: responseData.content.replace(/^\s+/, ""),
-          timestamp: new Date(),
-          inlineExecution: responseData.inlineExecution,
+        const responseData = result.data as {
+          content: string;
+          inlineExecution?: any;
         };
-        console.log('AISidebar: Assistant message created:', assistantMessage);
-        setMessages((prev) => [...prev, assistantMessage]);
+        setMessages((prev) => {
+          const copy = [...prev];
+          const idx = copy.findIndex((m) => m.id === liveId);
+          if (idx !== -1) {
+            copy[idx] = {
+              ...copy[idx],
+              content: (responseData.content || "").replace(/^\s+/, ""),
+              inlineExecution: responseData.inlineExecution,
+            } as any;
+          }
+          return copy;
+        });
       } else {
+        setMessages((prev) => prev.filter((m) => m.id !== liveId));
         const errorMessage: ChatMessage = {
-          id: (Date.now() + 1).toString(),
+          id: `error_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
           role: "system",
           content: `Error: ${result.error}`,
           timestamp: new Date(),
@@ -820,7 +948,7 @@ export const AISidebar: React.FC<AISidebarProps> = ({
     } catch (error) {
       if ((error as Error).name !== "AbortError") {
         const errorMessage: ChatMessage = {
-          id: (Date.now() + 1).toString(),
+          id: `error_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
           role: "system",
           content: `Failed to communicate with Bit: ${
             (error as Error).message
@@ -843,7 +971,10 @@ export const AISidebar: React.FC<AISidebarProps> = ({
   };
 
   const handleCreateCodeWindow = async (executionId: string) => {
-    console.log('AISidebar: handleCreateCodeWindow called with executionId:', executionId);
+    console.log(
+      "AISidebar: handleCreateCodeWindow called with executionId:",
+      executionId
+    );
     try {
       const result = await window.electronAPI.invoke("ai:execute-tool", {
         toolName: "createCodeWindowFromInline",
@@ -853,7 +984,7 @@ export const AISidebar: React.FC<AISidebarProps> = ({
         },
       });
 
-      console.log('AISidebar: Tool execution result:', result);
+      console.log("AISidebar: Tool execution result:", result);
 
       if (!result.success) {
         console.error("Failed to create code window:", result.error);
@@ -949,6 +1080,36 @@ export const AISidebar: React.FC<AISidebarProps> = ({
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
             <button
+              onClick={async () => {
+                await loadConversationHistory();
+                setShowHistory(!showHistory);
+              }}
+              style={{
+                padding: "4px 8px",
+                borderRadius: "4px",
+                border: "1px solid #374151",
+                backgroundColor: showHistory ? "#374151" : "transparent",
+                color: showHistory ? "#f3f4f6" : "#9ca3af",
+                fontSize: "12px",
+                cursor: "pointer",
+              }}
+              onMouseEnter={(e) => {
+                if (!showHistory) {
+                  e.currentTarget.style.backgroundColor = "#374151";
+                  e.currentTarget.style.color = "#f3f4f6";
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!showHistory) {
+                  e.currentTarget.style.backgroundColor = "transparent";
+                  e.currentTarget.style.color = "#9ca3af";
+                }
+              }}
+              title="Conversation History"
+            >
+              📋
+            </button>
+            <button
               onClick={startNewChat}
               style={{
                 padding: "4px 8px",
@@ -973,7 +1134,7 @@ export const AISidebar: React.FC<AISidebarProps> = ({
               title="Start New Chat"
             >
               <span>➕</span>
-              <span>New Chat</span>
+              <span>New</span>
             </button>
             <button
               onClick={() => setShowAPIKeyModal(true)}
@@ -1000,12 +1161,95 @@ export const AISidebar: React.FC<AISidebarProps> = ({
           }}
         >
           {isConfigured
-            ? `🔑 Ready to assist with windows and content • Chat: ${
-                conversationId === "main" ? "Main" : "New"
-              }`
+            ? `🔑 Ready to assist • ${messages.length} messages`
             : "Click ⚙️ to configure API key"}
         </p>
       </div>
+
+      {/* Conversation History Sidebar */}
+      {showHistory && (
+        <div
+          style={{
+            borderTop: "1px solid #374151",
+            borderBottom: "1px solid #374151",
+            backgroundColor: "#111827",
+            maxHeight: "200px",
+            overflowY: "auto",
+          }}
+        >
+          <div
+            style={{
+              padding: "8px 16px",
+              fontSize: "12px",
+              color: "#9ca3af",
+              borderBottom: "1px solid #374151",
+            }}
+          >
+            Conversation History ({conversationHistory.length})
+          </div>
+          {conversationHistory.length === 0 ? (
+            <div
+              style={{
+                padding: "16px",
+                textAlign: "center",
+                color: "#6b7280",
+                fontSize: "14px",
+              }}
+            >
+              No previous conversations
+            </div>
+          ) : (
+            conversationHistory
+              .sort((a, b) => b.lastMessage.getTime() - a.lastMessage.getTime())
+              .map((conv) => (
+                <div
+                  key={conv.id}
+                  onClick={() => loadConversation(conv.id)}
+                  style={{
+                    padding: "8px 16px",
+                    cursor: "pointer",
+                    borderBottom: "1px solid #374151",
+                    backgroundColor: conv.id === conversationId ? "#374151" : "transparent",
+                  }}
+                  onMouseEnter={(e) => {
+                    if (conv.id !== conversationId) {
+                      e.currentTarget.style.backgroundColor = "#2d3748";
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (conv.id !== conversationId) {
+                      e.currentTarget.style.backgroundColor = "transparent";
+                    }
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: "14px",
+                      color: "#f9fafb",
+                      marginBottom: "4px",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {conv.title.length > 30 ? `${conv.title.substring(0, 30)}...` : conv.title}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: "11px",
+                      color: "#9ca3af",
+                      display: "flex",
+                      justifyContent: "space-between",
+                    }}
+                  >
+                    <span>{conv.messageCount} messages</span>
+                    <span>{conv.lastMessage.toLocaleDateString()}</span>
+                  </div>
+                </div>
+              ))
+          )}
+        </div>
+      )}
 
       {/* Messages */}
       <div
@@ -1045,28 +1289,30 @@ export const AISidebar: React.FC<AISidebarProps> = ({
           >
             {/* File References */}
             {message.fileReferences && message.fileReferences.length > 0 && (
-              <div style={{
-                marginBottom: '8px',
-                padding: '8px',
-                backgroundColor: 'rgba(0, 0, 0, 0.2)',
-                borderRadius: '6px',
-                fontSize: '12px',
-              }}>
-                <div style={{ marginBottom: '4px', opacity: 0.8 }}>
+              <div
+                style={{
+                  marginBottom: "8px",
+                  padding: "8px",
+                  backgroundColor: "rgba(0, 0, 0, 0.2)",
+                  borderRadius: "6px",
+                  fontSize: "12px",
+                }}
+              >
+                <div style={{ marginBottom: "4px", opacity: 0.8 }}>
                   📎 Attached files:
                 </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "4px" }}>
                   {message.fileReferences.map((file, index) => (
                     <span
                       key={index}
                       style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '4px',
-                        padding: '2px 6px',
-                        backgroundColor: 'rgba(255, 255, 255, 0.1)',
-                        borderRadius: '3px',
-                        fontSize: '11px',
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "4px",
+                        padding: "2px 6px",
+                        backgroundColor: "rgba(255, 255, 255, 0.1)",
+                        borderRadius: "3px",
+                        fontSize: "11px",
                       }}
                     >
                       <File size={10} />
@@ -1076,8 +1322,8 @@ export const AISidebar: React.FC<AISidebarProps> = ({
                 </div>
               </div>
             )}
-            
-            <MessageWithHover 
+
+            <MessageWithHover
               message={message}
               onCreateCodeWindow={handleCreateCodeWindow}
               renderFormattedMessage={renderFormattedMessage}
@@ -1085,21 +1331,6 @@ export const AISidebar: React.FC<AISidebarProps> = ({
           </div>
         ))}
 
-        {isProcessing && (
-          <div
-            style={{
-              padding: "8px 12px",
-              borderRadius: "8px",
-              backgroundColor: "#374151",
-              color: "#9ca3af",
-              fontSize: "14px",
-              alignSelf: "flex-start",
-              maxWidth: "85%",
-            }}
-          >
-            Bit is thinking...
-          </div>
-        )}
 
         <div ref={messagesEndRef} />
       </div>
@@ -1118,28 +1349,30 @@ export const AISidebar: React.FC<AISidebarProps> = ({
         <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
           {/* Attached Files Display */}
           {attachedFiles.length > 0 && (
-            <div style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              gap: '8px',
-              padding: '8px',
-              backgroundColor: '#374151',
-              borderRadius: '6px',
-              border: '1px solid #4b5563',
-            }}>
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: "8px",
+                padding: "8px",
+                backgroundColor: "#374151",
+                borderRadius: "6px",
+                border: "1px solid #4b5563",
+              }}
+            >
               {attachedFiles.map((file, index) => (
                 <div
                   key={index}
                   style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    padding: '4px 8px',
-                    backgroundColor: '#1f2937',
-                    borderRadius: '4px',
-                    fontSize: '12px',
-                    color: '#f1f5f9',
-                    border: '1px solid #6b7280',
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    padding: "4px 8px",
+                    backgroundColor: "#1f2937",
+                    borderRadius: "4px",
+                    fontSize: "12px",
+                    color: "#f1f5f9",
+                    border: "1px solid #6b7280",
                   }}
                 >
                   <File size={14} color="#9ca3af" />
@@ -1147,17 +1380,19 @@ export const AISidebar: React.FC<AISidebarProps> = ({
                   <button
                     type="button"
                     onClick={() => {
-                      setAttachedFiles(prev => prev.filter((_, i) => i !== index));
+                      setAttachedFiles((prev) =>
+                        prev.filter((_, i) => i !== index)
+                      );
                     }}
                     style={{
-                      background: 'none',
-                      border: 'none',
-                      color: '#9ca3af',
-                      cursor: 'pointer',
-                      padding: '2px',
-                      borderRadius: '2px',
-                      display: 'flex',
-                      alignItems: 'center',
+                      background: "none",
+                      border: "none",
+                      color: "#9ca3af",
+                      cursor: "pointer",
+                      padding: "2px",
+                      borderRadius: "2px",
+                      display: "flex",
+                      alignItems: "center",
                     }}
                   >
                     <X size={12} />
@@ -1168,165 +1403,185 @@ export const AISidebar: React.FC<AISidebarProps> = ({
           )}
 
           {/* Chat Input Container */}
-          <div style={{ position: 'relative' }}>
+          <div style={{ position: "relative" }}>
             <textarea
-            ref={textareaRef}
-            value={inputValue}
-            onChange={handleInputChange}
-            onKeyDown={handleKeyDown}
-            placeholder={
-              isConfigured
-                ? "Move with me..."
-                : "Configure API key to start chatting..."
-            }
-            disabled={isProcessing || !isConfigured}
-            style={{
-              width: "100%",
-              maxHeight: "160px",
-              minHeight: "64px",
-              padding: "12px",
-              borderRadius: "8px",
-              border: "1px solid #374151",
-              backgroundColor: "#1f2937",
-              color: "#f9fafb",
-              fontSize: "14px",
-              outline: "none",
-              resize: "none",
-              lineHeight: 1.4,
-              overflowY: "auto",
-              boxSizing: "border-box",
-            }}
-            onFocus={(e) => {
-              e.target.style.borderColor = "#3b82f6";
-            }}
-            onBlur={(e) => {
-              e.target.style.borderColor = "#374151";
-            }}
-          />
-          
-          {/* Attach File Button */}
-          <button
-            type="button"
-            onClick={() => setShowFilePicker(true)}
-            disabled={isProcessing || !isConfigured}
-            style={{
-              position: 'absolute',
-              bottom: '8px',
-              right: '8px',
-              width: '32px',
-              height: '32px',
-              backgroundColor: '#374151',
-              border: '1px solid #4b5563',
-              borderRadius: '6px',
-              cursor: isProcessing || !isConfigured ? 'not-allowed' : 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              transition: 'all 0.2s ease',
-            }}
-            onMouseEnter={(e) => {
-              if (!isProcessing && isConfigured) {
-                e.currentTarget.style.backgroundColor = '#4b5563';
-                e.currentTarget.style.borderColor = '#6b7280';
+              ref={textareaRef}
+              value={inputValue}
+              onChange={handleInputChange}
+              onKeyDown={handleKeyDown}
+              placeholder={
+                isConfigured
+                  ? "Move with me..."
+                  : "Configure API key to start chatting..."
               }
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = '#374151';
-              e.currentTarget.style.borderColor = '#4b5563';
-            }}
-            title="Attach files"
-          >
-            <Paperclip size={16} color={isProcessing || !isConfigured ? '#6b7280' : '#9ca3af'} />
-          </button>
-
-          {/* @ Mention Dropdown - Positioned relative to input container */}
-          {showMentionDropdown && (
-            <div
+              disabled={isProcessing || !isConfigured}
               style={{
-                position: 'absolute',
-                left: '0px',
-                bottom: '100%', // Position above the textarea
-                marginBottom: '8px',
-                backgroundColor: '#1f2937',
-                border: '1px solid #374151',
-                borderRadius: '8px',
-                boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
-                maxHeight: '200px',
-                overflowY: 'auto',
-                zIndex: 1002,
-                minWidth: '200px',
-                width: '100%',
+                width: "100%",
+                maxHeight: "160px",
+                minHeight: "64px",
+                padding: "12px",
+                borderRadius: "8px",
+                border: "1px solid #374151",
+                backgroundColor: "#1f2937",
+                color: "#f9fafb",
+                fontSize: "14px",
+                outline: "none",
+                resize: "none",
+                lineHeight: 1.4,
+                overflowY: "auto",
+                boxSizing: "border-box",
               }}
+              onFocus={(e) => {
+                e.target.style.borderColor = "#3b82f6";
+              }}
+              onBlur={(e) => {
+                e.target.style.borderColor = "#374151";
+              }}
+            />
+
+            {/* Attach File Button */}
+            <button
+              type="button"
+              onClick={() => setShowFilePicker(true)}
+              disabled={isProcessing || !isConfigured}
+              style={{
+                position: "absolute",
+                bottom: "8px",
+                right: "8px",
+                width: "32px",
+                height: "32px",
+                backgroundColor: "#374151",
+                border: "1px solid #4b5563",
+                borderRadius: "6px",
+                cursor:
+                  isProcessing || !isConfigured ? "not-allowed" : "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                transition: "all 0.2s ease",
+              }}
+              onMouseEnter={(e) => {
+                if (!isProcessing && isConfigured) {
+                  e.currentTarget.style.backgroundColor = "#4b5563";
+                  e.currentTarget.style.borderColor = "#6b7280";
+                }
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = "#374151";
+                e.currentTarget.style.borderColor = "#4b5563";
+              }}
+              title="Attach files"
             >
-              <div 
-                onClick={(e) => {
-                  console.log('Dropdown container clicked:', e);
+              <Paperclip
+                size={16}
+                color={isProcessing || !isConfigured ? "#6b7280" : "#9ca3af"}
+              />
+            </button>
+
+            {/* @ Mention Dropdown - Positioned relative to input container */}
+            {showMentionDropdown && (
+              <div
+                style={{
+                  position: "absolute",
+                  left: "0px",
+                  bottom: "100%", // Position above the textarea
+                  marginBottom: "8px",
+                  backgroundColor: "#1f2937",
+                  border: "1px solid #374151",
+                  borderRadius: "8px",
+                  boxShadow:
+                    "0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)",
+                  maxHeight: "200px",
+                  overflowY: "auto",
+                  zIndex: 1002,
+                  minWidth: "200px",
+                  width: "100%",
                 }}
-                style={{ padding: '4px 0' }}
               >
-                {(() => {
-                  const allFiles = flattenFiles(mentionFiles);
-                  const filteredFiles = allFiles.filter(file =>
-                    file.name.toLowerCase().includes(mentionQuery.toLowerCase())
-                  );
-                  
-                  console.log('Rendering files:', filteredFiles);
-                  
-                  return filteredFiles.length > 0 ? (
-                    filteredFiles.slice(0, 10).map((file, index) => (
+                <div
+                  onClick={(e) => {
+                    console.log("Dropdown container clicked:", e);
+                  }}
+                  style={{ padding: "4px 0" }}
+                >
+                  {(() => {
+                    const allFiles = flattenFiles(mentionFiles);
+                    const filteredFiles = allFiles.filter((file) =>
+                      file.name
+                        .toLowerCase()
+                        .includes(mentionQuery.toLowerCase())
+                    );
+
+                    console.log("Rendering files:", filteredFiles);
+
+                    return filteredFiles.length > 0 ? (
+                      filteredFiles.slice(0, 10).map((file, index) => (
+                        <div
+                          key={`file-${index}-${file.path}`}
+                          onMouseDown={(e) => {
+                            console.log("Mouse down on file!", file);
+                            // Try handling on mouse down instead of click
+                            e.preventDefault();
+                            e.stopPropagation();
+                            console.log(
+                              "Calling handleMentionSelect from mouseDown"
+                            );
+                            handleMentionSelect(file);
+                          }}
+                          onClick={(e) => {
+                            console.log("File div clicked!", file, e);
+                          }}
+                          style={{
+                            padding: "8px 12px",
+                            cursor: "pointer",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "8px",
+                            fontSize: "14px",
+                            color: "#f1f5f9",
+                            borderBottom:
+                              index < filteredFiles.length - 1
+                                ? "1px solid #374151"
+                                : "none",
+                            backgroundColor: "transparent",
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.backgroundColor = "#374151";
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.backgroundColor =
+                              "transparent";
+                          }}
+                        >
+                          <File size={14} color="#9ca3af" />
+                          <span>{file.name}</span>
+                          <span
+                            style={{
+                              fontSize: "12px",
+                              color: "#6b7280",
+                              marginLeft: "auto",
+                            }}
+                          >
+                            {file.path.split("/").slice(-2, -1)[0] || ""}
+                          </span>
+                        </div>
+                      ))
+                    ) : (
                       <div
-                        key={`file-${index}-${file.path}`}
-                        onMouseDown={(e) => {
-                          console.log('Mouse down on file!', file);
-                          // Try handling on mouse down instead of click
-                          e.preventDefault();
-                          e.stopPropagation();
-                          console.log('Calling handleMentionSelect from mouseDown');
-                          handleMentionSelect(file);
-                        }}
-                        onClick={(e) => {
-                          console.log('File div clicked!', file, e);
-                        }}
                         style={{
-                          padding: '8px 12px',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '8px',
-                          fontSize: '14px',
-                          color: '#f1f5f9',
-                          borderBottom: index < filteredFiles.length - 1 ? '1px solid #374151' : 'none',
-                          backgroundColor: 'transparent',
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.backgroundColor = '#374151';
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.backgroundColor = 'transparent';
+                          padding: "8px 12px",
+                          fontSize: "14px",
+                          color: "#9ca3af",
+                          textAlign: "center",
                         }}
                       >
-                        <File size={14} color="#9ca3af" />
-                        <span>{file.name}</span>
-                        <span style={{ fontSize: '12px', color: '#6b7280', marginLeft: 'auto' }}>
-                          {file.path.split('/').slice(-2, -1)[0] || ''}
-                        </span>
+                        {mentionQuery ? "No matching files" : "No files found"}
                       </div>
-                    ))
-                  ) : (
-                    <div style={{
-                      padding: '8px 12px',
-                      fontSize: '14px',
-                      color: '#9ca3af',
-                      textAlign: 'center',
-                    }}>
-                      {mentionQuery ? 'No matching files' : 'No files found'}
-                    </div>
-                  );
-                })()}
+                    );
+                  })()}
+                </div>
               </div>
-            </div>
-          )}
-
+            )}
           </div>
 
           <div
@@ -1350,7 +1605,7 @@ export const AISidebar: React.FC<AISidebarProps> = ({
                   }
 
                   const abortMessage: ChatMessage = {
-                    id: (Date.now() + 1).toString(),
+                    id: `abort_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
                     role: "system",
                     content: "Request aborted by user",
                     timestamp: new Date(),
@@ -1409,7 +1664,7 @@ export const AISidebar: React.FC<AISidebarProps> = ({
         isOpen={showFilePicker}
         onClose={() => setShowFilePicker(false)}
         onSelectFiles={(files) => {
-          setAttachedFiles(prev => [...prev, ...files]);
+          setAttachedFiles((prev) => [...prev, ...files]);
         }}
         multiSelect={true}
       />

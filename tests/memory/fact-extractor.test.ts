@@ -148,10 +148,12 @@ describe("FactExtractor", () => {
   afterEach(() => {
     // Clean up test database
     const db = memoryService.getDatabase();
-    db.exec("DELETE FROM facts");
-    db.exec("DELETE FROM conversations");
-    db.exec("DELETE FROM conversation_messages");
-    db.exec("DELETE FROM vec_facts");
+    if (db) {
+      db.exec("DELETE FROM facts");
+      db.exec("DELETE FROM conversations");
+      db.exec("DELETE FROM conversation_messages");
+      db.exec("DELETE FROM vec_facts");
+    }
   });
 
   describe("Fact Extraction", () => {

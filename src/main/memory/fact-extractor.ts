@@ -136,9 +136,11 @@ Remember: ONLY return valid JSON, nothing else.`;
           const messageIds = messages.map((m) => m.id);
           for (const messageId of messageIds) {
             const db = this.memoryService.getDatabase();
-            db.prepare(
-              "UPDATE conversation_messages SET processed_for_facts = 1 WHERE id = ?"
-            ).run(messageId);
+            if (db) {
+              db.prepare(
+                "UPDATE conversation_messages SET processed_for_facts = 1 WHERE id = ?"
+              ).run(messageId);
+            }
           }
         } catch (error) {
           console.warn(

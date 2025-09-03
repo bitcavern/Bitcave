@@ -36,34 +36,12 @@ export function getDb() {
       // Add a small delay to ensure the app is fully ready
       console.log("[MemoryDB] Waiting for app to be ready...");
 
-      // Check if existing database has old foreign key constraint
-      if (fs.existsSync(DB_PATH)) {
-        try {
-          const tempDb = new Database(DB_PATH, { readonly: true });
-          const tableInfo = tempDb.pragma("table_info(facts)") as any[];
-          const hasOldConstraint = tableInfo.some(
-            (col: any) =>
-              col.name === "vec_id" && col.pk === 0 && col.notnull === 0
-          );
-          tempDb.close();
-
-          if (hasOldConstraint) {
-            console.log(
-              "[MemoryDB] Detected old database schema with foreign key constraints, will recreate"
-            );
-            // Remove old database file
-            fs.unlinkSync(DB_PATH);
-          }
-        } catch (error) {
-          console.warn(
-            "[MemoryDB] Could not check existing database schema:",
-            error
-          );
-          if (fs.existsSync(DB_PATH)) {
-            fs.unlinkSync(DB_PATH);
-          }
-        }
-      }
+      // Skip schema validation for now to prevent database drops
+      // The schema check was causing the database to be deleted on every startup
+      console.log("[MemoryDB] Skipping schema validation to preserve existing data");
+      
+      // Only perform schema migration if explicitly needed in the future
+      // TODO: Implement proper schema migration instead of dropping the DB
 
       // Try to create the database with error handling
       try {

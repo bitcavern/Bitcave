@@ -65,6 +65,16 @@ export interface OpenRouterResponse {
   };
 }
 
+export type StreamCallbacks = {
+  onContentDelta?: (delta: string) => void;
+  onToolCallDelta?: (delta: ToolCall) => void;
+};
+
+export interface OpenRouterStreamFinal {
+  content: string;
+  tool_calls?: ToolCall[];
+}
+
 export class OpenRouterClient {
   private apiKey: string;
   private baseUrl = "https://openrouter.ai/api/v1";
@@ -81,7 +91,7 @@ export class OpenRouterClient {
   }
 
   async createChatCompletion(
-    request: OpenRouterRequest,
+    request: OpenRouterRequest
   ): Promise<OpenRouterResponse> {
     const url = `${this.baseUrl}/chat/completions`;
 
@@ -134,7 +144,7 @@ export class OpenRouterClient {
       const error = new Error(
         `OpenRouter API error: ${response.status} - ${
           errorData.error?.message || response.statusText
-        }`,
+        }`
       );
 
       // Log the error
@@ -172,6 +182,126 @@ export class OpenRouterClient {
     }
 
     return responseData;
+  }
+
+  async createChatCompletionStream(
+    request: OpenRouterRequest,
+    callbacks: StreamCallbacks = {},
+    abortSignal?: AbortSignal
+  ): Promise<OpenRouterStreamFinal> {
+    const url = `${this.baseUrl}/chat/completions`;
+
+    const payload = {
+      model: request.model || this.defaultModel,
+      reasoning: { type: "disabled" },
+      messages: request.messages,
+      tools: request.tools,
+      tool_choice: request.tool_choice || "auto",
+      temperature: request.temperature || 0.7,
+      max_tokens: request.max_tokens || 1000,
+      stream: true,
+    } as any;
+
+    if (this.logger) {
+      this.logger.logMessage("openrouter", "API Stream Request", {
+        url,
+        model: payload.model,
+        messageCount: payload.messages.length,
+        toolCount: payload.tools?.length || 0,
+        temperature: payload.temperature,
+        maxTokens: payload.max_tokens,
+        stream: true,
+      });
+    }
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${this.apiKey}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://bitcave.app",
+        "X-Title": "Bitcave AI Dashboard",
+      },
+      body: JSON.stringify(payload),
+      signal: abortSignal,
+    });
+
+    if (!response.ok || !response.body) {
+      const errorData = (await response.json().catch(() => ({}))) as any;
+      throw new Error(
+        `OpenRouter stream error: ${response.status} - ${
+          errorData.error?.message || response.statusText
+        }`
+      );
+    }
+
+    const decoder = new TextDecoder();
+    const reader = response.body.getReader();
+    let buffer = "";
+    let content = "";
+    const toolCalls: ToolCall[] = [];
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      let idx;
+      while ((idx = buffer.indexOf("\n\n")) !== -1) {
+        const chunk = buffer.slice(0, idx).trim();
+        buffer = buffer.slice(idx + 2);
+
+        if (!chunk) continue;
+        for (const line of chunk.split("\n")) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith("data:")) continue;
+          const dataStr = trimmed.slice("data:".length).trim();
+          if (dataStr === "[DONE]") {
+            // End of stream
+            if (this.logger) {
+              this.logger.logMessage("openrouter", "API Stream Done", {
+                contentLength: content.length,
+                toolCallCount: toolCalls.length,
+              });
+            }
+            return {
+              content,
+              tool_calls: toolCalls.length ? toolCalls : undefined,
+            };
+          }
+
+          try {
+            const json = JSON.parse(dataStr);
+            const choice = json.choices?.[0];
+            const delta = choice?.delta || choice?.message || {};
+
+            if (delta.content) {
+              const text = String(delta.content);
+              console.log(`[OpenRouter Stream] Delta received: "${text}" (${text.length} chars)`);
+              content += text;
+              callbacks.onContentDelta?.(text);
+            }
+
+            // Some providers stream tool_calls as deltas; attempt to accumulate
+            if (delta.tool_calls && Array.isArray(delta.tool_calls)) {
+              for (const tc of delta.tool_calls as ToolCall[]) {
+                toolCalls.push(tc);
+                callbacks.onToolCallDelta?.(tc);
+              }
+            }
+          } catch (e) {
+            // Ignore malformed lines
+            if (this.logger) {
+              this.logger.logMessage("openrouter", "API Stream Parse Error", {
+                line: dataStr.substring(0, 200),
+              });
+            }
+          }
+        }
+      }
+    }
+
+    return { content, tool_calls: toolCalls.length ? toolCalls : undefined };
   }
 
   setApiKey(apiKey: string) {

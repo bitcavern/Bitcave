@@ -78,10 +78,24 @@ export class AIService {
 
         // Also create in the database if it doesn't exist
         if (this.memoryService && this.memoryService.isDatabaseAvailable()) {
-          const dbConversation = await this.memoryService.getConversation(conversationId);
-          if (!dbConversation) {
-            await this.memoryService.createConversation(conversationId, conversationId);
-          }
+          // don't block main loop
+          this.memoryService.getConversation(conversationId).then((dbConv) => {
+            if (!dbConv) {
+              // Use first part of user message as title, truncated to 50 chars
+              const title = userMessage.length > 50 
+                ? `${userMessage.substring(0, 47)}...`
+                : userMessage;
+              this.memoryService!.createConversation(
+                conversationId,
+                title
+              ).catch((e) =>
+                console.warn(
+                  "[AIService] Failed to create conversation in memory:",
+                  e
+                )
+              );
+            }
+          });
         }
       }
 
@@ -91,17 +105,16 @@ export class AIService {
         content: userMessage,
       });
 
-      // Store message in memory system for fact extraction
+      // Store message in memory system for fact extraction (non-blocking)
       if (this.memoryService && this.memoryService.isDatabaseAvailable()) {
-        try {
-          await this.memoryService.addMessageToConversation(
-            conversationId,
-            "user",
-            userMessage
+        this.memoryService
+          .addMessageToConversation(conversationId, "user", userMessage)
+          .catch((error) =>
+            console.warn(
+              "[AIService] Failed to store message in memory:",
+              error
+            )
           );
-        } catch (error) {
-          console.warn("[AIService] Failed to store message in memory:", error);
-        }
       }
 
       // Create abort controller for this conversation
@@ -121,6 +134,125 @@ export class AIService {
       console.error("AI Service error:", error);
       this.logger.logError(conversationId, error, { userMessage });
       throw error;
+    }
+  }
+
+  // New streaming variant. Returns final content; streams tokens via callback.
+  async chatStream(
+    conversationId: string,
+    userMessage: string,
+    onToken: (delta: string) => void
+  ): Promise<{ content: string; inlineExecution?: any }> {
+    if (!this.client)
+      throw new Error("AI service not configured. Please set an API key.");
+
+    // Reuse chat setup but don't block on memory writes
+    let conversation = this.conversations.get(conversationId);
+    if (!conversation) {
+      conversation = {
+        id: conversationId,
+        messages: [],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      this.conversations.set(conversationId, conversation);
+
+      if (this.memoryService && this.memoryService.isDatabaseAvailable()) {
+        this.memoryService.getConversation(conversationId).then((dbConv) => {
+          if (!dbConv) {
+            // Use first part of user message as title, truncated to 50 chars
+            const title = userMessage.length > 50 
+              ? `${userMessage.substring(0, 47)}...`
+              : userMessage;
+            this.memoryService!.createConversation(
+              conversationId,
+              title
+            ).catch(() => {});
+          }
+        });
+      }
+    }
+
+    conversation.messages.push({ role: "user", content: userMessage });
+    if (this.memoryService && this.memoryService.isDatabaseAvailable()) {
+      this.memoryService
+        .addMessageToConversation(conversationId, "user", userMessage)
+        .catch(() => {});
+    }
+
+    const controller = new AbortController();
+    this.abortControllers.set(conversationId, controller);
+
+    try {
+      // Build context (this still blocks; can be optimized later with caching)
+      let contextContent = this.buildWindowContextMessage();
+      if (this.memoryService) {
+        const memoryContext = await this.buildMemoryContext(
+          conversation.messages
+        );
+        if (memoryContext) contextContent += "\n\n" + memoryContext;
+      }
+
+      const contextMessage: OpenRouterMessage = {
+        role: "system",
+        content: contextContent,
+      };
+      const request: OpenRouterRequest = {
+        messages: [...conversation.messages, contextMessage],
+        tools: this.getToolDefinitions(),
+        tool_choice: "auto",
+        temperature: 0.2,
+        max_tokens: 32000,
+      };
+
+      console.log(`[AIService] Starting streaming request...`);
+      
+      // Stream tokens
+      const result = await this.client.createChatCompletionStream(
+        request,
+        {
+          onContentDelta: (delta) => {
+            console.log(`[AIService Stream] Received delta: "${delta}" (${delta.length} chars)`);
+            onToken(delta);
+          },
+        },
+        controller.signal
+      );
+
+      console.log(`[AIService] Stream completed. Final content length: ${(result.content || "").length}`);
+      
+      const content = (result.content || "").trim();
+      if (content) {
+        console.log(`[AIService] Stream had content, returning streaming result`);
+      } else {
+        console.log(`[AIService] Stream had no content, falling back to non-streaming`);
+      }
+      
+      if (content) {
+        const assistantMessage: any = { role: "assistant", content };
+        const inlineExecution =
+          this.pendingInlineExecutions.get(conversationId);
+        if (inlineExecution) {
+          assistantMessage.inlineExecution = inlineExecution;
+          this.pendingInlineExecutions.delete(conversationId);
+        }
+
+        conversation.messages.push(assistantMessage);
+        conversation.updatedAt = new Date();
+
+        if (this.memoryService) {
+          this.memoryService
+            .addMessageToConversation(conversationId, "assistant", content)
+            .catch(() => {});
+        }
+
+        return { content, inlineExecution: assistantMessage.inlineExecution };
+      }
+
+      // If the stream ended without content, fall back to non-streaming one-shot
+      return await this.chat(conversationId, userMessage);
+    } finally {
+      this.abortControllers.delete(conversationId);
     }
   }
 
@@ -236,13 +368,11 @@ export class AIService {
         conversation.messages.push(assistantMessage);
         conversation.updatedAt = new Date();
 
-        // Store assistant message in memory system
+        // Store assistant message in memory system (non-blocking)
         if (this.memoryService) {
-          await this.memoryService.addMessageToConversation(
-            conversationId,
-            "assistant",
-            content
-          );
+          this.memoryService
+            .addMessageToConversation(conversationId, "assistant", content)
+            .catch(() => {});
         }
 
         return {
