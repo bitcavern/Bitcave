@@ -470,6 +470,7 @@ export const App: React.FC = () => {
       />
 
       <div 
+        id="main-content"
         style={{ 
           width: "100%", 
           height: "100%",

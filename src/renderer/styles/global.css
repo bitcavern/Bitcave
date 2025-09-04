@@ -216,3 +216,8 @@
 .fullscreen .auto-hide-scrollbar:hover::-webkit-scrollbar-thumb {
   background: rgba(75, 85, 99, 0.6);
 }
+
+.blur-effect {
+  filter: blur(10px);
+  transition: filter 0.3s ease;
+}
