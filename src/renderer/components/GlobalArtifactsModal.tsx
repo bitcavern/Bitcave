@@ -67,6 +67,7 @@ export const GlobalArtifactsModal: React.FC<GlobalArtifactsModalProps> = ({
 
   return (
     <div 
+      className="modal-backdrop"
       style={{
         position: 'fixed',
         top: 0,
@@ -80,7 +81,8 @@ export const GlobalArtifactsModal: React.FC<GlobalArtifactsModalProps> = ({
         alignItems: 'center',
         justifyContent: 'center',
         zIndex: 10000,
-        animation: 'modalFadeIn 0.2s ease-out'
+        padding: '20px',
+        boxSizing: 'border-box',
       }}
       onClick={(e) => {
         if (e.target === e.currentTarget) {
@@ -88,20 +90,23 @@ export const GlobalArtifactsModal: React.FC<GlobalArtifactsModalProps> = ({
         }
       }}
     >
-      <div style={{
-        background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.95) 0%, rgba(15, 23, 42, 0.95) 100%)',
-        backdropFilter: 'blur(20px)',
-        WebkitBackdropFilter: 'blur(20px)',
-        border: '1px solid rgba(148, 163, 184, 0.2)',
-        borderRadius: '16px',
-        width: '800px',
-        maxHeight: '85vh',
-        overflow: 'hidden',
-        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05)',
-        animation: 'modalSlideIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
-        color: '#f1f5f9'
-      }}
-      onClick={(e) => e.stopPropagation()}
+      <div 
+        className="modal-content"
+        style={{
+          background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.95) 0%, rgba(15, 23, 42, 0.95) 100%)',
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
+          border: '1px solid rgba(148, 163, 184, 0.2)',
+          borderRadius: '16px',
+          width: '100%',
+          maxWidth: '800px',
+          maxHeight: '90vh',
+          overflow: 'hidden',
+          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05)',
+          color: '#f1f5f9',
+          margin: 'auto',
+        }}
+        onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div style={{
@@ -167,7 +172,7 @@ export const GlobalArtifactsModal: React.FC<GlobalArtifactsModalProps> = ({
 
         {/* Content */}
         <div style={{
-          maxHeight: '60vh',
+          maxHeight: 'calc(90vh - 120px)', // Account for header height
           overflowY: 'auto',
           padding: '24px'
         }}>

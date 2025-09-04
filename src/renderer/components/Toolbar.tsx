@@ -8,6 +8,7 @@ import {
   LayoutGrid,
   Globe,
   Brain,
+  Home,
 } from "lucide-react";
 import type { CanvasState, WindowType, BaseWindow } from "@/shared/types";
 import { WINDOW_CONFIGS } from "@/shared/constants";
@@ -17,6 +18,7 @@ interface ToolbarProps {
   onCreateWindow: (type: WindowType) => void;
   onSettingsClick: () => void; // Added for settings modal
   onMemoryClick: () => void; // Added for memory modal
+  onHomeClick: () => void; // Added for home button
   selectedWindowId: string | null;
   windowCount: number;
   canvasState: CanvasState;
@@ -33,6 +35,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   onCreateWindow,
   onSettingsClick, // Added for settings modal
   onMemoryClick, // Added for memory modal
+  onHomeClick, // Added for home button
   selectedWindowId,
   windowCount: _windowCount,
   canvasState: _canvasState,
@@ -202,13 +205,14 @@ export const Toolbar: React.FC<ToolbarProps> = ({
         />
 
         <div
+          className="font-mono"
           style={{
             display: "flex",
             alignItems: "center",
-            gap: "16px",
+            gap: "12px",
             color: "#d1d5db",
-            fontSize: "12px",
-            fontFamily: "system-ui, -apple-system, sans-serif",
+            fontSize: "11px",
+            fontWeight: "500",
           }}
         >
           <div style={{ position: "relative" }}>
@@ -442,159 +446,220 @@ export const Toolbar: React.FC<ToolbarProps> = ({
         />
 
         {selectedWindow && (
-          <span style={{ color: "#3b82f6", fontWeight: "500" }}>
-            Selected: {getWindowLabel(selectedWindow)}
-          </span>
+          <div style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "6px",
+            padding: "4px 8px",
+            backgroundColor: "rgba(59, 130, 246, 0.1)",
+            borderRadius: "6px",
+            border: "1px solid rgba(59, 130, 246, 0.3)",
+            color: "#60a5fa",
+            fontSize: "11px",
+          }}>
+            <span style={{ fontSize: "12px" }}>{getIconForWindowType(selectedWindow.type)}</span>
+            <span className="font-mono">{getWindowLabel(selectedWindow)}</span>
+          </div>
         )}
 
-        {/* Left Sidebar Toggle */}
-        {onToggleLeftSidebar && (
+        {/* Control buttons group */}
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          {/* Home Button */}
           <button
-            onClick={onToggleLeftSidebar}
+            onClick={onHomeClick}
+            className="font-mono"
             style={{
               display: "flex",
               alignItems: "center",
-              gap: "6px",
-              padding: "6px 10px",
-              backgroundColor: leftSidebarVisible ? "#3b82f6" : "#374151",
+              gap: "4px",
+              padding: "4px 8px",
+              backgroundColor: "#dc2626",
               color: "white",
               border: "none",
-              borderRadius: "6px",
+              borderRadius: "4px",
               cursor: "pointer",
-              fontSize: "12px",
-              fontWeight: "500",
+              fontSize: "10px",
+              fontWeight: "600",
+              textTransform: "uppercase",
+              letterSpacing: "0.05em",
               transition: "all 0.2s",
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = leftSidebarVisible ? "#2563eb" : "#4b5563";
+              e.currentTarget.style.backgroundColor = "#b91c1c";
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = leftSidebarVisible ? "#3b82f6" : "#374151";
+              e.currentTarget.style.backgroundColor = "#dc2626";
             }}
-            title={leftSidebarVisible ? "Hide webview sidebar" : "Show webview sidebar"}
+            title="Return to project selection"
           >
-            <Globe size={14} />
-            <span>Browser</span>
+            <Home size={12} />
+            <span>Home</span>
           </button>
-        )}
 
-        {/* Grid Snap Toggle */}
-        {onToggleSnapToGrid && (
+          {/* Left Sidebar Toggle */}
+          {onToggleLeftSidebar && (
+            <button
+              onClick={onToggleLeftSidebar}
+              className="font-mono"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "4px",
+                padding: "4px 8px",
+                backgroundColor: leftSidebarVisible ? "#3b82f6" : "#374151",
+                color: "white",
+                border: "none",
+                borderRadius: "4px",
+                cursor: "pointer",
+                fontSize: "10px",
+                fontWeight: "600",
+                textTransform: "uppercase",
+                letterSpacing: "0.05em",
+                transition: "all 0.2s",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = leftSidebarVisible ? "#2563eb" : "#4b5563";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = leftSidebarVisible ? "#3b82f6" : "#374151";
+              }}
+              title={leftSidebarVisible ? "Hide webview sidebar" : "Show webview sidebar"}
+            >
+              <Globe size={12} />
+              <span>Web</span>
+            </button>
+          )}
+
+          {/* Grid Snap Toggle */}
+          {onToggleSnapToGrid && (
+            <button
+              onClick={onToggleSnapToGrid}
+              className="font-mono"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "4px",
+                padding: "4px 8px",
+                backgroundColor: snapToGrid ? "#059669" : "#374151",
+                color: "white",
+                border: "none",
+                borderRadius: "4px",
+                cursor: "pointer",
+                fontSize: "10px",
+                fontWeight: "600",
+                textTransform: "uppercase",
+                letterSpacing: "0.05em",
+                transition: "all 0.2s",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = snapToGrid ? "#047857" : "#4b5563";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = snapToGrid ? "#059669" : "#374151";
+              }}
+              title={snapToGrid ? "Disable grid snapping" : "Enable grid snapping"}
+            >
+              <LayoutGrid size={12} />
+              <span>{snapToGrid ? "Grid" : "Free"}</span>
+            </button>
+          )}
+
+          {/* Artifact Library */}
           <button
-            onClick={onToggleSnapToGrid}
+            onClick={() => setShowArtifactLibrary(true)}
+            className="font-mono"
             style={{
               display: "flex",
               alignItems: "center",
-              gap: "6px",
-              padding: "6px 10px",
-              backgroundColor: snapToGrid ? "#059669" : "#374151",
+              gap: "4px",
+              padding: "4px 8px",
+              backgroundColor: "#374151",
               color: "white",
               border: "none",
-              borderRadius: "6px",
+              borderRadius: "4px",
               cursor: "pointer",
-              fontSize: "12px",
-              fontWeight: "500",
+              fontSize: "10px",
+              fontWeight: "600",
+              textTransform: "uppercase",
+              letterSpacing: "0.05em",
               transition: "all 0.2s",
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = snapToGrid ? "#047857" : "#4b5563";
+              e.currentTarget.style.backgroundColor = "#4b5563";
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = snapToGrid ? "#059669" : "#374151";
+              e.currentTarget.style.backgroundColor = "#374151";
             }}
-            title={snapToGrid ? "Disable grid snapping" : "Enable grid snapping"}
+            title="Browse and import global artifacts"
           >
-            <LayoutGrid size={14} />
-            <span>{snapToGrid ? "Grid ON" : "Grid OFF"}</span>
+            <Library size={12} />
+            <span>Lib</span>
           </button>
-        )}
 
-        {/* Artifact Library */}
-        <button
-          onClick={() => setShowArtifactLibrary(true)}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "6px",
-            padding: "6px 10px",
-            backgroundColor: "#374151",
-            color: "white",
-            border: "none",
-            borderRadius: "6px",
-            cursor: "pointer",
-            fontSize: "12px",
-            fontWeight: "500",
-            transition: "all 0.2s",
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.backgroundColor = "#4b5563";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = "#374151";
-          }}
-          title="Browse and import global artifacts"
-        >
-          <Library size={14} />
-          <span>Library</span>
-        </button>
+          {/* Settings Button */}
+          <button
+            onClick={onSettingsClick}
+            className="font-mono"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "4px",
+              padding: "4px 8px",
+              backgroundColor: "#374151",
+              color: "white",
+              border: "none",
+              borderRadius: "4px",
+              cursor: "pointer",
+              fontSize: "10px",
+              fontWeight: "600",
+              textTransform: "uppercase",
+              letterSpacing: "0.05em",
+              transition: "all 0.2s",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = "#4b5563";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = "#374151";
+            }}
+            title="Open user settings"
+          >
+            <Settings size={12} />
+            <span>Set</span>
+          </button>
 
-        {/* Settings Button */}
-        <button
-          onClick={onSettingsClick}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "6px",
-            padding: "6px 10px",
-            backgroundColor: "#374151",
-            color: "white",
-            border: "none",
-            borderRadius: "6px",
-            cursor: "pointer",
-            fontSize: "12px",
-            fontWeight: "500",
-            transition: "all 0.2s",
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.backgroundColor = "#4b5563";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = "#374151";
-          }}
-          title="Open user settings"
-        >
-          <Settings size={14} />
-          <span>Settings</span>
-        </button>
-
-        {/* Memory Button */}
-        <button
-          onClick={onMemoryClick}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "6px",
-            padding: "6px 10px",
-            backgroundColor: "#374151",
-            color: "white",
-            border: "none",
-            borderRadius: "6px",
-            cursor: "pointer",
-            fontSize: "12px",
-            fontWeight: "500",
-            transition: "all 0.2s",
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.backgroundColor = "#4b5563";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = "#374151";
-          }}
-          title="Manage AI memory"
-        >
-          <Brain size={14} />
-          <span>Memory</span>
-        </button>
+          {/* Memory Button */}
+          <button
+            onClick={onMemoryClick}
+            className="font-mono"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "4px",
+              padding: "4px 8px",
+              backgroundColor: "#374151",
+              color: "white",
+              border: "none",
+              borderRadius: "4px",
+              cursor: "pointer",
+              fontSize: "10px",
+              fontWeight: "600",
+              textTransform: "uppercase",
+              letterSpacing: "0.05em",
+              transition: "all 0.2s",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = "#4b5563";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = "#374151";
+            }}
+            title="Manage AI memory"
+          >
+            <Brain size={12} />
+            <span>Mem</span>
+          </button>
+        </div>
 
         {/* Bit Status Indicator */}
         {/* <div

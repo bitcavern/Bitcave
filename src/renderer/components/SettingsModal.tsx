@@ -11,6 +11,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onClose,
 }) => {
   const [settings, setSettings] = useState<Partial<UserSettings>>({});
+  const [apiKey, setApiKey] = useState('');
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -25,6 +26,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       if (result.success) {
         setSettings(result.data);
       }
+      
+      // Check AI configuration status
+      const aiResult = await (window as any).electronAPI.invoke('ai:is-configured');
+      if (aiResult.success && aiResult.data) {
+        setApiKey('••••••••'); // Show masked key if configured
+      } else {
+        setApiKey('');
+      }
     } catch (error) {
       console.error('Failed to load user settings:', error);
     }
@@ -34,6 +43,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     setLoading(true);
     try {
       await (window as any).electronAPI.invoke('user:save-settings', settings);
+      
+      // Save API key if it's not the masked placeholder and not empty
+      if (apiKey && apiKey !== '••••••••') {
+        const result = await (window as any).electronAPI.invoke('ai:set-api-key', {
+          apiKey: apiKey.trim(),
+        });
+        if (!result.success) {
+          console.error('Failed to set API key:', result.error);
+        }
+      }
+      
       onClose();
     } catch (error) {
       console.error('Failed to save user settings:', error);
@@ -119,6 +139,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <option value="funny">Funny</option>
               <option value="robotic">Robotic</option>
             </select>
+          </div>
+
+          <div>
+            <label style={{ display: 'block', fontSize: '14px', fontWeight: '500', color: '#e2e8f0', marginBottom: '8px' }}>OpenRouter API Key</label>
+            <input
+              type="password"
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              placeholder="sk-or-v1-..."
+              style={inputStyle}
+            />
+            <p style={{ margin: '6px 0 0 0', fontSize: '12px', color: '#94a3b8' }}>
+              Get your API key from{' '}
+              <a href="https://openrouter.ai" target="_blank" rel="noopener noreferrer" style={{ color: '#3b82f6' }}>
+                openrouter.ai
+              </a>
+            </p>
           </div>
         </div>
 

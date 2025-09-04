@@ -8,7 +8,89 @@ import type {
 } from "@/shared/types";
 import { InlineExecution as InlineExecutionComponent } from "./InlineExecution";
 import { FilePicker } from "./FilePicker";
-import { Paperclip, X, File } from "lucide-react";
+import { Paperclip, X, File, Bot, Maximize2, Minimize2, History, Plus, Settings, FileUp, Trash2, Home } from "lucide-react";
+
+// Streaming text component with character-by-character reveal
+interface StreamingTextDisplayProps {
+  finalContent: string;
+  isStreaming: boolean;
+  isThinking: boolean;
+  renderFormattedMessage: (content: string) => React.ReactNode;
+}
+
+const StreamingTextDisplay: React.FC<StreamingTextDisplayProps> = ({ 
+  finalContent, 
+  isStreaming, 
+  isThinking,
+  renderFormattedMessage 
+}) => {
+  const [displayedContent, setDisplayedContent] = useState('');
+  const [currentIndex, setCurrentIndex] = useState(0);
+
+  useEffect(() => {
+    if (isThinking || !finalContent) {
+      setDisplayedContent('');
+      setCurrentIndex(0);
+      return;
+    }
+
+    // Always use character-by-character reveal when streaming is active
+    if (isStreaming && currentIndex < finalContent.length) {
+      const timer = setTimeout(() => {
+        setCurrentIndex(prev => prev + 1);
+        setDisplayedContent(finalContent.slice(0, currentIndex + 1));
+      }, 5); // 5ms delay between characters for smooth animation
+      
+      return () => clearTimeout(timer);
+    }
+    
+    // When streaming stops, ensure we show all content immediately
+    if (!isStreaming && currentIndex < finalContent.length) {
+      setDisplayedContent(finalContent);
+      setCurrentIndex(finalContent.length);
+    }
+  }, [finalContent, currentIndex, isStreaming, isThinking]);
+
+  // Reset when final content changes significantly (new streaming session)
+  useEffect(() => {
+    if (finalContent.length < displayedContent.length) {
+      setDisplayedContent('');
+      setCurrentIndex(0);
+    }
+  }, [finalContent, displayedContent]);
+
+  if (isThinking) {
+    return (
+      <div style={{
+        display: "flex",
+        alignItems: "center",
+        gap: "8px",
+        color: "#9ca3af",
+        fontStyle: "italic",
+        padding: "16px 0",
+      }}>
+        <div
+          style={{
+            width: "16px",
+            height: "16px",
+            border: "2px solid #374151",
+            borderTop: "2px solid #3b82f6",
+            borderRadius: "50%",
+            animation: "spin 1s linear infinite",
+          }}
+        />
+        Bit is thinking...
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ position: "relative" }}>
+      {renderFormattedMessage(displayedContent)}
+    </div>
+  );
+};
+
 
 // Component for messages with hover functionality
 interface MessageWithHoverProps {
@@ -82,7 +164,7 @@ const MessageWithHover: React.FC<MessageWithHoverProps> = ({
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >
-      <div style={{ overflowX: "auto", paddingBottom: "16px" }}>
+      <div style={{ overflowX: "auto" }}>
         {renderFormattedMessage(message.content)}
       </div>
 
@@ -131,7 +213,7 @@ const MessageWithHover: React.FC<MessageWithHoverProps> = ({
           }}
           title="Open source in code editor"
         >
-          📝
+          <FileUp size={12} />
         </button>
       )}
 
@@ -159,11 +241,6 @@ interface AISidebarProps {
   onWidthChange?: (width: number) => void;
 }
 
-interface APIKeyModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onSave: (apiKey: string) => void;
-}
 
 // Lightweight formatter for basic markdown-like syntax: headings, bold, italics,
 // inline code, and fenced code blocks. Purposefully minimal to avoid heavy deps.
@@ -366,123 +443,6 @@ const renderFormattedMessage = (content: string): ReactNode => {
   return <>{nodes}</>;
 };
 
-// API Key Modal Component
-const APIKeyModal: React.FC<APIKeyModalProps> = ({
-  isOpen,
-  onClose,
-  onSave,
-}) => {
-  const [apiKey, setApiKey] = useState("");
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (apiKey.trim()) {
-      onSave(apiKey.trim());
-      setApiKey("");
-      onClose();
-    }
-  };
-
-  if (!isOpen) return null;
-
-  return (
-    <div
-      style={{
-        position: "fixed",
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        backgroundColor: "rgba(0, 0, 0, 0.7)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        zIndex: 1000,
-      }}
-      onClick={onClose}
-    >
-      <div
-        style={{
-          backgroundColor: "#1f2937",
-          border: "1px solid #374151",
-          borderRadius: "12px",
-          padding: "24px",
-          width: "400px",
-          maxWidth: "90vw",
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h3 style={{ margin: "0 0 16px 0", color: "#f9fafb" }}>
-          Configure OpenRouter API Key
-        </h3>
-        <p style={{ margin: "0 0 16px 0", color: "#9ca3af", fontSize: "14px" }}>
-          Enter your OpenRouter API key to enable Bit features. You can get one
-          at{" "}
-          <a
-            href="https://openrouter.ai"
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{ color: "#3b82f6" }}
-          >
-            openrouter.ai
-          </a>
-        </p>
-        <form onSubmit={handleSubmit}>
-          <input
-            type="password"
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-            placeholder="sk-or-v1-..."
-            style={{
-              width: "100%",
-              padding: "12px",
-              marginBottom: "16px",
-              borderRadius: "6px",
-              border: "1px solid #374151",
-              backgroundColor: "#111827",
-              color: "#f9fafb",
-              fontSize: "14px",
-              outline: "none",
-            }}
-            autoFocus
-          />
-          <div
-            style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}
-          >
-            <button
-              type="button"
-              onClick={onClose}
-              style={{
-                padding: "8px 16px",
-                borderRadius: "6px",
-                border: "1px solid #374151",
-                backgroundColor: "transparent",
-                color: "#9ca3af",
-                cursor: "pointer",
-              }}
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={!apiKey.trim()}
-              style={{
-                padding: "8px 16px",
-                borderRadius: "6px",
-                border: "none",
-                backgroundColor: apiKey.trim() ? "#3b82f6" : "#374151",
-                color: "#f9fafb",
-                cursor: apiKey.trim() ? "pointer" : "not-allowed",
-              }}
-            >
-              Save
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-};
 
 export const AISidebar: React.FC<AISidebarProps> = ({
   // windows,
@@ -493,15 +453,18 @@ export const AISidebar: React.FC<AISidebarProps> = ({
   const [inputValue, setInputValue] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [isConfigured, setIsConfigured] = useState(false);
-  const [showAPIKeyModal, setShowAPIKeyModal] = useState(false);
   const [conversationId, setConversationId] = useState(() => 
     `chat_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
   ); // Current conversation ID
   const [isResizing, setIsResizing] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(380);
+  const [isHidden, setIsHidden] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [animationClass, setAnimationClass] = useState("");
   const [abortController, setAbortController] =
     useState<AbortController | null>(null);
   const [attachedFiles, setAttachedFiles] = useState<FileReference[]>([]);
+  const activeStreamingIdRef = useRef<string | null>(null);
   const [showFilePicker, setShowFilePicker] = useState(false);
   const [showMentionDropdown, setShowMentionDropdown] = useState(false);
   const [mentionQuery, setMentionQuery] = useState("");
@@ -521,6 +484,29 @@ export const AISidebar: React.FC<AISidebarProps> = ({
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  const toggleHidden = () => {
+    if (isFullscreen) {
+      setIsFullscreen(false);
+      setAnimationClass("");
+      return;
+    }
+    
+    setAnimationClass(isHidden ? "slide-in-right" : "slide-out-right");
+    if (!isHidden) {
+      setTimeout(() => setIsHidden(true), 300);
+    } else {
+      setIsHidden(false);
+    }
+  };
+  
+  const toggleFullscreen = () => {
+    setIsFullscreen(!isFullscreen);
+    if (!isFullscreen) {
+      setIsHidden(false);
+      setAnimationClass("");
+    }
   };
 
   const loadConversationHistory = async () => {
@@ -585,7 +571,7 @@ export const AISidebar: React.FC<AISidebarProps> = ({
               id: "welcome",
               role: "system",
               content:
-                "🔑 Bit Assistant ready! I can help you create and manage text windows, read content, and organize your workspace. What would you like to do?",
+                "Bit Assistant ready! I can help you create and manage text windows, read content, and organize your workspace. What would you like to do?",
               timestamp: new Date(),
             },
           ]);
@@ -613,7 +599,7 @@ export const AISidebar: React.FC<AISidebarProps> = ({
                 id: "welcome",
                 role: "system",
                 content:
-                  "🔑 Bit Assistant ready! I can help you create and manage text windows, read content, and organize your workspace. What would you like to do?",
+                  "Bit Assistant ready! I can help you create and manage text windows, read content, and organize your workspace. What would you like to do?",
                 timestamp: new Date(),
               },
             ]);
@@ -704,27 +690,6 @@ export const AISidebar: React.FC<AISidebarProps> = ({
     };
   }, [showMentionDropdown]);
 
-  const handleAPIKeySave = async (apiKey: string) => {
-    try {
-      const result = await window.electronAPI.invoke("ai:set-api-key", {
-        apiKey,
-      });
-      if (result.success) {
-        setIsConfigured(true);
-        setMessages([
-          {
-            id: "welcome",
-            role: "system",
-            content:
-              "Bit Assistant ready! I can help you create and manage text windows, read content, and organize your workspace. What would you like to do?",
-            timestamp: new Date(),
-          },
-        ]);
-      }
-    } catch (error) {
-      console.error("Failed to set API key:", error);
-    }
-  };
 
   const loadMentionFiles = async () => {
     try {
@@ -840,7 +805,7 @@ export const AISidebar: React.FC<AISidebarProps> = ({
     if (!inputValue.trim() || isProcessing) return;
 
     if (!isConfigured) {
-      setShowAPIKeyModal(true);
+      // User needs to configure API key in settings
       return;
     }
 
@@ -850,9 +815,21 @@ export const AISidebar: React.FC<AISidebarProps> = ({
       content: inputValue.trim(),
       timestamp: new Date(),
       fileReferences: attachedFiles.length > 0 ? [...attachedFiles] : undefined,
+      justSent: true, // Flag for animation
     };
 
     setMessages((prev) => [...prev, userMessage]);
+    
+    // Clear the justSent flag after animation completes
+    setTimeout(() => {
+      setMessages((prev) => 
+        prev.map(msg => 
+          msg.id === userMessage.id 
+            ? { ...msg, justSent: false } 
+            : msg
+        )
+      );
+    }, 400);
     setInputValue("");
     setAttachedFiles([]); // Clear attached files after sending
     setIsProcessing(true);
@@ -875,48 +852,69 @@ export const AISidebar: React.FC<AISidebarProps> = ({
       }
 
       // Prepare a live assistant message placeholder for streaming
-      const liveId = `stream_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const liveId = `stream_${conversationId}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      
+      // Set this as the active streaming message
+      activeStreamingIdRef.current = liveId;
+      
       setMessages((prev) => [
         ...prev,
         {
           id: liveId,
           role: "assistant",
-          content: "Bit is thinking...",
+          content: "",
           timestamp: new Date(),
           isThinking: true, // Flag to indicate this is a placeholder
         } as any,
       ]);
 
-      // Subscribe to stream deltas
+      // Subscribe to stream deltas with strict ID checking
       const onDelta = (
         _event: any,
-        payload: { conversationId: string; delta: string }
+        payload: { conversationId: string; delta: string; targetMessageId?: string }
       ) => {
+        // Only process if this is for our active streaming message
         if (payload?.conversationId !== conversationId) return;
-        console.log(`[Frontend] Received delta: "${payload.delta}" (${payload.delta.length} chars)`);
+        if (activeStreamingIdRef.current !== liveId) {
+          console.log(`[Frontend] Ignoring delta for inactive stream. Active: ${activeStreamingIdRef.current}, Received for: ${liveId}`);
+          return;
+        }
+        
+        console.log(`[Frontend] Received delta for ${liveId}: "${payload.delta}" (${payload.delta.length} chars)`);
         setMessages((prev) => {
           const copy = [...prev];
-          const idx = copy.findIndex((m) => m.id === liveId);
+          // Find the exact message by ID
+          const idx = copy.findIndex(m => m.id === liveId);
           if (idx !== -1) {
             const currentMessage = copy[idx] as any;
+            console.log(`[Frontend] Updating message at index ${idx} with id ${liveId}: "${payload.delta}"`);
             copy[idx] = {
               ...currentMessage,
               content: currentMessage.isThinking ? payload.delta : (currentMessage.content || "") + payload.delta,
               isThinking: false, // Clear the thinking flag when real content arrives
+              isStreaming: true, // Add streaming flag for animation
             };
+          } else {
+            console.warn(`[Frontend] Could not find streaming message with id: ${liveId}. Available IDs:`, copy.map(m => m.id));
           }
           return copy;
         });
       };
+      
+      // Use the generic event but filter by conversationId and liveId
       window.electronAPI.on("ai:chat-stream-delta", onDelta);
 
       const result = await window.electronAPI.invoke("ai:chat-stream", {
         conversationId,
         message: messageWithFiles,
+        targetMessageId: liveId, // Send the target message ID to the backend
       });
 
-      // Unsubscribe
+      // Unsubscribe immediately after the call
       window.electronAPI.off("ai:chat-stream-delta", onDelta);
+      
+      // Clear the active streaming ID
+      activeStreamingIdRef.current = null;
 
       if (result.success) {
         const responseData = result.data as {
@@ -925,18 +923,22 @@ export const AISidebar: React.FC<AISidebarProps> = ({
         };
         setMessages((prev) => {
           const copy = [...prev];
-          const idx = copy.findIndex((m) => m.id === liveId);
+          const idx = copy.map(m => m.id).lastIndexOf(liveId);
           if (idx !== -1) {
             copy[idx] = {
               ...copy[idx],
-              content: (responseData.content || "").replace(/^\s+/, ""),
+              // Keep the streamed content, don't replace it with server's final content
+              // content: (responseData.content || "").replace(/^\s+/, ""),
               inlineExecution: responseData.inlineExecution,
+              isStreaming: false, // Clear streaming flag when complete
+              isThinking: false, // Make sure thinking flag is cleared
             } as any;
           }
           return copy;
         });
       } else {
         setMessages((prev) => prev.filter((m) => m.id !== liveId));
+        activeStreamingIdRef.current = null; // Clear on error too
         const errorMessage: ChatMessage = {
           id: `error_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
           role: "system",
@@ -946,6 +948,7 @@ export const AISidebar: React.FC<AISidebarProps> = ({
         setMessages((prev) => [...prev, errorMessage]);
       }
     } catch (error) {
+      activeStreamingIdRef.current = null; // Clear on exception too
       if ((error as Error).name !== "AbortError") {
         const errorMessage: ChatMessage = {
           id: `error_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
@@ -996,57 +999,61 @@ export const AISidebar: React.FC<AISidebarProps> = ({
 
   return (
     <div
+      className={`${animationClass} ${isFullscreen ? 'fullscreen' : ''}`}
       style={{
         position: "fixed",
-        top: "52px",
-        right: "12px",
-        width: `${sidebarWidth}px`,
-        height: "calc(100vh - 64px)",
+        top: isFullscreen ? "0" : "52px",
+        right: isFullscreen ? "0" : "12px",
+        left: isFullscreen ? "0" : "auto",
+        bottom: isFullscreen ? "0" : "auto",
+        width: isFullscreen ? "100vw" : `${sidebarWidth}px`,
+        height: isFullscreen ? "100vh" : "calc(100vh - 64px)",
         backdropFilter: "blur(10px)",
-        backgroundColor: "rgba(31, 41, 55, 0.2)",
-        border: "1px solid #374151",
-        borderRadius: "12px", // macOS window border radius
+        backgroundColor: isFullscreen ? "rgba(15, 23, 42, 0.98)" : "rgba(31, 41, 55, 0.2)",
+        border: isFullscreen ? "none" : "1px solid #374151",
+        borderRadius: isFullscreen ? "0" : "12px",
         display: "flex",
         flexDirection: "column",
-        zIndex: 150,
-        boxShadow:
-          "0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.2)",
-        transition: "width 0.2s ease-out, box-shadow 0.2s ease-out",
+        zIndex: isFullscreen ? 9999 : 150,
+        boxShadow: isFullscreen ? "none" : "0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.2)",
+        transition: "all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)",
       }}
     >
-      {/* Resize handle */}
-      <div
-        ref={sidebarRef}
-        style={{
-          position: "absolute",
-          left: 0,
-          top: 0,
-          width: "4px",
-          height: "100%",
-          cursor: "col-resize",
-          backgroundColor: "transparent",
-          zIndex: 160,
-          borderTopLeftRadius: "12px",
-          borderBottomLeftRadius: "12px",
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.backgroundColor = "rgba(59, 130, 246, 0.3)";
-        }}
-        onMouseLeave={(e) => {
-          if (!isResizing) {
-            e.currentTarget.style.backgroundColor = "transparent";
-          }
-        }}
-      />
+      {/* Resize handle - only show when not fullscreen */}
+      {!isFullscreen && (
+        <div
+          ref={sidebarRef}
+          style={{
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: "4px",
+            height: "100%",
+            cursor: "col-resize",
+            backgroundColor: "transparent",
+            zIndex: 160,
+            borderTopLeftRadius: "12px",
+            borderBottomLeftRadius: "12px",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = "rgba(59, 130, 246, 0.3)";
+          }}
+          onMouseLeave={(e) => {
+            if (!isResizing) {
+              e.currentTarget.style.backgroundColor = "transparent";
+            }
+          }}
+        />
+      )}
 
       {/* Header */}
       <div
         style={{
-          padding: "16px",
+          padding: isFullscreen ? "24px" : "16px",
           borderBottom: "1px solid #374151",
           backgroundColor: "#111827",
-          borderTopLeftRadius: "12px",
-          borderTopRightRadius: "12px",
+          borderTopLeftRadius: isFullscreen ? "0" : "12px",
+          borderTopRightRadius: isFullscreen ? "0" : "12px",
         }}
       >
         <div
@@ -1080,6 +1087,36 @@ export const AISidebar: React.FC<AISidebarProps> = ({
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
             <button
+              onClick={toggleFullscreen}
+              style={{
+                padding: "4px 8px",
+                borderRadius: "4px",
+                border: "1px solid #374151",
+                backgroundColor: isFullscreen ? "#3b82f6" : "transparent",
+                color: isFullscreen ? "#f3f4f6" : "#9ca3af",
+                fontSize: "12px",
+                cursor: "pointer",
+              }}
+              title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
+            >
+              {isFullscreen ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
+            </button>
+            <button
+              onClick={toggleHidden}
+              style={{
+                padding: "4px 8px",
+                borderRadius: "4px",
+                border: "1px solid #374151",
+                backgroundColor: "transparent",
+                color: "#9ca3af",
+                fontSize: "12px",
+                cursor: "pointer",
+              }}
+              title="Hide sidebar"
+            >
+              <X size={12} />
+            </button>
+            <button
               onClick={async () => {
                 await loadConversationHistory();
                 setShowHistory(!showHistory);
@@ -1107,7 +1144,7 @@ export const AISidebar: React.FC<AISidebarProps> = ({
               }}
               title="Conversation History"
             >
-              📋
+              <History size={12} />
             </button>
             <button
               onClick={startNewChat}
@@ -1133,23 +1170,8 @@ export const AISidebar: React.FC<AISidebarProps> = ({
               }}
               title="Start New Chat"
             >
-              <span>➕</span>
+              <Plus size={12} />
               <span>New</span>
-            </button>
-            <button
-              onClick={() => setShowAPIKeyModal(true)}
-              style={{
-                padding: "4px 8px",
-                borderRadius: "4px",
-                border: "1px solid #374151",
-                backgroundColor: "transparent",
-                color: "#9ca3af",
-                fontSize: "12px",
-                cursor: "pointer",
-              }}
-              title="Configure API Key"
-            >
-              ⚙️
             </button>
           </div>
         </div>
@@ -1161,8 +1183,8 @@ export const AISidebar: React.FC<AISidebarProps> = ({
           }}
         >
           {isConfigured
-            ? `🔑 Ready to assist • ${messages.length} messages`
-            : "Click ⚙️ to configure API key"}
+            ? `Ready to assist • ${messages.length} messages`
+            : "Configure API key in Settings to start chatting"}
         </p>
       </div>
 
@@ -1262,74 +1284,130 @@ export const AISidebar: React.FC<AISidebarProps> = ({
           gap: "12px",
         }}
       >
-        {messages.map((message) => (
-          <div
-            key={message.id}
-            style={{
-              padding: "12px 16px",
-              borderRadius: "12px",
-              backgroundColor:
-                message.role === "user"
-                  ? "#3b82f6"
-                  : message.role === "system"
-                  ? "#374151"
-                  : "#374151",
-              color: "#f9fafb",
-              fontSize: "14px",
-              lineHeight: "1.5",
-              alignSelf: message.role === "user" ? "flex-end" : "flex-start",
-              maxWidth: "85%",
-              boxShadow: "0 2px 8px rgba(0, 0, 0, 0.2)",
-              border: `1px solid ${
-                message.role === "user"
-                  ? "rgba(59, 130, 246, 0.3)"
-                  : "rgba(55, 65, 81, 0.3)"
-              }`,
-            }}
-          >
-            {/* File References */}
-            {message.fileReferences && message.fileReferences.length > 0 && (
-              <div
-                style={{
-                  marginBottom: "8px",
-                  padding: "8px",
-                  backgroundColor: "rgba(0, 0, 0, 0.2)",
-                  borderRadius: "6px",
-                  fontSize: "12px",
-                }}
-              >
-                <div style={{ marginBottom: "4px", opacity: 0.8 }}>
-                  📎 Attached files:
-                </div>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: "4px" }}>
-                  {message.fileReferences.map((file, index) => (
-                    <span
-                      key={index}
+        {messages.map((message, index) => {
+          const isUser = message.role === "user";
+          const isAI = message.role === "assistant";
+          const isSystem = message.role === "system";
+          const messageAny = message as any;
+          
+          return (
+            <div
+              key={message.id}
+              className={`${messageAny.justSent ? 'message-slide-up' : ''} ${messageAny.isStreaming ? 'streaming-text' : ''}`}
+              style={{
+                width: "100%",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: isUser ? "flex-end" : "flex-start",
+                marginBottom: index === messages.length - 1 ? "0" : "16px",
+              }}
+            >
+              {/* User messages keep their boxes */}
+              {isUser && (
+                <div
+                  style={{
+                    padding: "12px 16px",
+                    borderRadius: "12px",
+                    backgroundColor: "#111827",
+                    color: "#f9fafb",
+                    fontSize: "14px",
+                    lineHeight: "1.5",
+                    maxWidth: "85%",
+                    border: "1px solid #374151",
+                  }}
+                >
+                  {/* File References */}
+                  {message.fileReferences && message.fileReferences.length > 0 && (
+                    <div
                       style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: "4px",
-                        padding: "2px 6px",
-                        backgroundColor: "rgba(255, 255, 255, 0.1)",
-                        borderRadius: "3px",
-                        fontSize: "11px",
+                        marginBottom: "8px",
+                        padding: "8px",
+                        backgroundColor: "rgba(0, 0, 0, 0.2)",
+                        borderRadius: "6px",
+                        fontSize: "12px",
                       }}
                     >
-                      <File size={10} />
-                      {file.fileName}
-                    </span>
-                  ))}
+                      <div style={{ marginBottom: "4px", opacity: 0.8 }}>
+                        📎 Attached files:
+                      </div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: "4px" }}>
+                        {message.fileReferences.map((file, index) => (
+                          <span
+                            key={index}
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "4px",
+                              padding: "2px 6px",
+                              backgroundColor: "rgba(255, 255, 255, 0.1)",
+                              borderRadius: "3px",
+                              fontSize: "11px",
+                            }}
+                          >
+                            <File size={10} />
+                            {file.fileName}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  <MessageWithHover
+                    message={message}
+                    onCreateCodeWindow={handleCreateCodeWindow}
+                    renderFormattedMessage={renderFormattedMessage}
+                  />
                 </div>
-              </div>
-            )}
-
-            <MessageWithHover
-              message={message}
-              onCreateCodeWindow={handleCreateCodeWindow}
-              renderFormattedMessage={renderFormattedMessage}
-            />
-          </div>
-        ))}
+              )}
+              
+              {/* AI messages are fullwidth without boxes */}
+              {isAI && (
+                <div
+                  style={{
+                    width: "100%",
+                    color: "#f9fafb",
+                    fontSize: "14px",
+                    lineHeight: "1.6",
+                    padding: "8px 0",
+                  }}
+                >
+                  <StreamingTextDisplay
+                    finalContent={message.content}
+                    isStreaming={messageAny.isStreaming || false}
+                    isThinking={messageAny.isThinking || false}
+                    renderFormattedMessage={renderFormattedMessage}
+                  />
+                  {!messageAny.isThinking && (
+                    <MessageWithHover
+                      message={message}
+                      onCreateCodeWindow={handleCreateCodeWindow}
+                      renderFormattedMessage={() => null}
+                    />
+                  )}
+                </div>
+              )}
+              
+              {/* System messages with subtle styling */}
+              {isSystem && (
+                <div
+                  style={{
+                    width: "100%",
+                    padding: "8px 12px",
+                    borderRadius: "8px",
+                    backgroundColor: "rgba(55, 65, 81, 0.3)",
+                    color: "#9ca3af",
+                    fontSize: "13px",
+                    lineHeight: "1.5",
+                    textAlign: "center",
+                    fontStyle: "italic",
+                  }}
+                >
+                  {message.content}
+                </div>
+              )}
+            </div>
+          );
+        })}
 
 
         <div ref={messagesEndRef} />
@@ -1407,7 +1485,14 @@ export const AISidebar: React.FC<AISidebarProps> = ({
             <textarea
               ref={textareaRef}
               value={inputValue}
-              onChange={handleInputChange}
+              onChange={(e) => {
+                handleInputChange(e);
+                // Auto-expand textarea
+                const textarea = e.target;
+                textarea.style.height = 'auto';
+                const scrollHeight = Math.min(textarea.scrollHeight, 120); // Max ~5 lines
+                textarea.style.height = `${Math.max(scrollHeight, 48)}px`;
+              }}
               onKeyDown={handleKeyDown}
               placeholder={
                 isConfigured
@@ -1415,10 +1500,12 @@ export const AISidebar: React.FC<AISidebarProps> = ({
                   : "Configure API key to start chatting..."
               }
               disabled={isProcessing || !isConfigured}
+              className="auto-expand-textarea"
               style={{
                 width: "100%",
-                maxHeight: "160px",
-                minHeight: "64px",
+                height: "48px", // Start with minimal height
+                minHeight: "48px",
+                maxHeight: "120px", // ~5 lines max
                 padding: "12px",
                 borderRadius: "8px",
                 border: "1px solid #374151",
@@ -1428,7 +1515,7 @@ export const AISidebar: React.FC<AISidebarProps> = ({
                 outline: "none",
                 resize: "none",
                 lineHeight: 1.4,
-                overflowY: "auto",
+                overflowY: inputValue.split('\n').length > 4 ? "auto" : "hidden",
                 boxSizing: "border-box",
               }}
               onFocus={(e) => {
@@ -1654,11 +1741,6 @@ export const AISidebar: React.FC<AISidebarProps> = ({
         </div>
       </form>
 
-      <APIKeyModal
-        isOpen={showAPIKeyModal}
-        onClose={() => setShowAPIKeyModal(false)}
-        onSave={handleAPIKeySave}
-      />
 
       <FilePicker
         isOpen={showFilePicker}

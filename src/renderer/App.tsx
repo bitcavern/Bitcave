@@ -16,6 +16,7 @@ import type {
   CodeExecutionResult,
 } from "@/shared/types";
 import { APP_CONFIG } from "@/shared/constants";
+import "./styles/global.css"; // Import global styles
 
 // Grid snapping utility function
 const snapToGrid = (value: number, gridSize: number): number => {
@@ -448,6 +449,7 @@ export const App: React.FC = () => {
         leftSidebarWidth={leftSidebarWidth}
         onSettingsClick={() => setSettingsModalOpen(true)} // Added for settings
         onMemoryClick={() => setMemoryModalOpen(true)} // Added for memory management
+        onHomeClick={() => setCurrentProject(null)} // Added for home button
       />
 
       <LeftSidebar
