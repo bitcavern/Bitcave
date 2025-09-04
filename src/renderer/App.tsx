@@ -232,42 +232,53 @@ export const App: React.FC = () => {
 
   const handleMoveWindow = async (
     windowId: string,
-    position: { x: number; y: number }
+    position: { x: number; y: number },
+    isFinal = false
   ) => {
     try {
       const movedWindow = windows.find((w) => w.id === windowId);
       if (!movedWindow) return;
 
       let newPosition = position;
-      const otherWindows = windows.filter((w) => w.id !== windowId);
-      const movedWindowRect = {
-        ...position,
-        width: movedWindow.size.width,
-        height: movedWindow.size.height,
-      };
 
-      let collision = false;
-      for (const w of otherWindows) {
-        const windowRect = {
-          x: w.position.x,
-          y: w.position.y,
-          width: w.size.width,
-          height: w.size.height,
+      if (isFinal) {
+        const otherWindows = windows.filter((w) => w.id !== windowId);
+        const movedWindowRect = {
+          ...position,
+          width: movedWindow.size.width,
+          height: movedWindow.size.height,
         };
-        if (checkCollision(movedWindowRect, windowRect)) {
-          collision = true;
-          break;
-        }
-      }
 
-      if (collision) {
-        newPosition = findNextAvailablePosition(
-          position.x,
-          position.y,
-          movedWindow.size.width,
-          movedWindow.size.height,
-          otherWindows,
-          APP_CONFIG.grid.size
+        let collision = false;
+        for (const w of otherWindows) {
+          const windowRect = {
+            x: w.position.x,
+            y: w.position.y,
+            width: w.size.width,
+            height: w.size.height,
+          };
+          if (checkCollision(movedWindowRect, windowRect)) {
+            collision = true;
+            break;
+          }
+        }
+
+        if (collision) {
+          newPosition = findNextAvailablePosition(
+            position.x,
+            position.y,
+            movedWindow.size.width,
+            movedWindow.size.height,
+            otherWindows,
+            APP_CONFIG.grid.size
+          );
+        }
+      } else {
+        // Live update without collision detection
+        setWindows((prev) =>
+          prev.map((w) =>
+            w.id === windowId ? { ...w, position: newPosition } : w
+          )
         );
       }
 
@@ -478,7 +489,7 @@ export const App: React.FC = () => {
               isSelected={selectedWindowId === window.id}
               onSelect={() => setSelectedWindowId(window.id)}
               onDelete={() => handleDeleteWindow(window.id)}
-              onMove={(position) => handleMoveWindow(window.id, position)}
+              onMove={(position, isFinal) => handleMoveWindow(window.id, position, isFinal)}
               onResize={(size) => handleResizeWindow(window.id, size)}
               onUpdate={(updates) => handleUpdateWindow(window.id, updates)}
               onExecuteCode={executeCode}

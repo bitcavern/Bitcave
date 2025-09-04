@@ -17,7 +17,7 @@ interface WindowRendererProps {
   isSelected: boolean;
   onSelect: () => void;
   onDelete: () => void;
-  onMove: (position: { x: number; y: number }) => void;
+  onMove: (position: { x: number; y: number }, isFinal?: boolean) => void;
   onResize: (size: { width: number; height: number }) => void;
   onUpdate: (updates: Partial<BaseWindow>) => void;
   onExecuteCode?: (
@@ -48,6 +48,7 @@ export const WindowRenderer: React.FC<WindowRendererProps> = ({
   const windowRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
+  const [opacity, setOpacity] = useState(1);
   const [showGlobalArtifactsModal, setShowGlobalArtifactsModal] = useState(false);
   const [dragStart, setDragStart] = useState({
     x: 0,
@@ -151,13 +152,30 @@ export const WindowRenderer: React.FC<WindowRendererProps> = ({
         const deltaY = event.clientY - dragStart.y;
         let newX = dragStart.windowX + deltaX;
         let newY = dragStart.windowY + deltaY;
-        
+
         // Apply grid snapping if enabled
         if (snapToGridEnabled) {
           newX = snapToGrid(newX, APP_CONFIG.grid.size);
           newY = snapToGrid(newY, APP_CONFIG.grid.size);
         }
-        
+
+        // Check for collisions
+        let colliding = false;
+        for (const w of windows) {
+          if (w.id === window.id) continue;
+          if (
+            newX < w.position.x + w.size.width &&
+            newX + window.size.width > w.position.x &&
+            newY < w.position.y + w.size.height &&
+            newY + window.size.height > w.position.y
+          ) {
+            colliding = true;
+            break;
+          }
+        }
+
+        setOpacity(colliding ? 0.5 : 1);
+
         onMove({ x: newX, y: newY });
       } else if (isResizing) {
         const deltaX = event.clientX - resizeStart.x;
@@ -205,8 +223,12 @@ export const WindowRenderer: React.FC<WindowRendererProps> = ({
     };
 
     const handleMouseUp = () => {
+      if (isDragging) {
+        onMove({ x: window.position.x, y: window.position.y }, true);
+      }
       setIsDragging(false);
       setIsResizing(false);
+      setOpacity(1);
     };
 
     if (isDragging || isResizing) {
@@ -250,6 +272,7 @@ export const WindowRenderer: React.FC<WindowRendererProps> = ({
           "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)",
         overflow: "hidden",
         userSelect: "none",
+        opacity: isDragging ? opacity : (window.isLocked ? 0.8 : 1),
       }}
       onClick={onSelect}
       onMouseDown={(e) => {
