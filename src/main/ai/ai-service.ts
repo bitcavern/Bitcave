@@ -78,24 +78,26 @@ export class AIService {
 
         // Also create in the database if it doesn't exist
         if (this.memoryService && this.memoryService.isDatabaseAvailable()) {
-          // don't block main loop
-          this.memoryService.getConversation(conversationId).then((dbConv) => {
+          // Wait for conversation creation to avoid race condition with first message save
+          try {
+            const dbConv = await this.memoryService.getConversation(conversationId);
             if (!dbConv) {
               // Use first part of user message as title, truncated to 50 chars
               const title = userMessage.length > 50 
                 ? `${userMessage.substring(0, 47)}...`
                 : userMessage;
-              this.memoryService!.createConversation(
+              await this.memoryService.createConversation(
                 conversationId,
                 title
-              ).catch((e) =>
-                console.warn(
-                  "[AIService] Failed to create conversation in memory:",
-                  e
-                )
               );
+              console.log(`[AIService] Created new conversation in database: ${conversationId}`);
             }
-          });
+          } catch (e) {
+            console.warn(
+              "[AIService] Failed to create conversation in memory:",
+              e
+            );
+          }
         }
       }
 
@@ -158,18 +160,25 @@ export class AIService {
       this.conversations.set(conversationId, conversation);
 
       if (this.memoryService && this.memoryService.isDatabaseAvailable()) {
-        this.memoryService.getConversation(conversationId).then((dbConv) => {
+        try {
+          const dbConv = await this.memoryService.getConversation(conversationId);
           if (!dbConv) {
             // Use first part of user message as title, truncated to 50 chars
             const title = userMessage.length > 50 
               ? `${userMessage.substring(0, 47)}...`
               : userMessage;
-            this.memoryService!.createConversation(
+            await this.memoryService.createConversation(
               conversationId,
               title
-            ).catch(() => {});
+            );
+            console.log(`[AIService] Created new conversation in database (streaming): ${conversationId}`);
           }
-        });
+        } catch (e) {
+          console.warn(
+            "[AIService] Failed to create conversation in memory (streaming):",
+            e
+          );
+        }
       }
     }
 
