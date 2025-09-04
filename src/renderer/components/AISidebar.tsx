@@ -8,7 +8,20 @@ import type {
 } from "@/shared/types";
 import { InlineExecution as InlineExecutionComponent } from "./InlineExecution";
 import { FilePicker } from "./FilePicker";
-import { Paperclip, X, File, Bot, Maximize2, Minimize2, History, Plus, Settings, FileUp, Trash2, Home } from "lucide-react";
+import {
+  Paperclip,
+  X,
+  File,
+  Bot,
+  Maximize2,
+  Minimize2,
+  History,
+  Plus,
+  Settings,
+  FileUp,
+  Trash2,
+  Home,
+} from "lucide-react";
 
 // Streaming text component with character-by-character reveal
 interface StreamingTextDisplayProps {
@@ -18,18 +31,18 @@ interface StreamingTextDisplayProps {
   renderFormattedMessage: (content: string) => React.ReactNode;
 }
 
-const StreamingTextDisplay: React.FC<StreamingTextDisplayProps> = ({ 
-  finalContent, 
-  isStreaming, 
+const StreamingTextDisplay: React.FC<StreamingTextDisplayProps> = ({
+  finalContent,
+  isStreaming,
   isThinking,
-  renderFormattedMessage 
+  renderFormattedMessage,
 }) => {
-  const [displayedContent, setDisplayedContent] = useState('');
+  const [displayedContent, setDisplayedContent] = useState("");
   const [currentIndex, setCurrentIndex] = useState(0);
 
   useEffect(() => {
     if (isThinking || !finalContent) {
-      setDisplayedContent('');
+      setDisplayedContent("");
       setCurrentIndex(0);
       return;
     }
@@ -37,13 +50,13 @@ const StreamingTextDisplay: React.FC<StreamingTextDisplayProps> = ({
     // Always use character-by-character reveal when streaming is active
     if (isStreaming && currentIndex < finalContent.length) {
       const timer = setTimeout(() => {
-        setCurrentIndex(prev => prev + 1);
+        setCurrentIndex((prev) => prev + 1);
         setDisplayedContent(finalContent.slice(0, currentIndex + 1));
       }, 5); // 5ms delay between characters for smooth animation
-      
+
       return () => clearTimeout(timer);
     }
-    
+
     // When streaming stops, ensure we show all content immediately
     if (!isStreaming && currentIndex < finalContent.length) {
       setDisplayedContent(finalContent);
@@ -54,21 +67,23 @@ const StreamingTextDisplay: React.FC<StreamingTextDisplayProps> = ({
   // Reset when final content changes significantly (new streaming session)
   useEffect(() => {
     if (finalContent.length < displayedContent.length) {
-      setDisplayedContent('');
+      setDisplayedContent("");
       setCurrentIndex(0);
     }
   }, [finalContent, displayedContent]);
 
   if (isThinking) {
     return (
-      <div style={{
-        display: "flex",
-        alignItems: "center",
-        gap: "8px",
-        color: "#9ca3af",
-        fontStyle: "italic",
-        padding: "16px 0",
-      }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "8px",
+          color: "#9ca3af",
+          fontStyle: "italic",
+          padding: "16px 0",
+        }}
+      >
         <div
           style={{
             width: "16px",
@@ -90,7 +105,6 @@ const StreamingTextDisplay: React.FC<StreamingTextDisplayProps> = ({
     </div>
   );
 };
-
 
 // Component for messages with hover functionality
 interface MessageWithHoverProps {
@@ -240,7 +254,6 @@ interface AISidebarProps {
   onCreateTextWindow: (label: string, content?: string) => void;
   onWidthChange?: (width: number) => void;
 }
-
 
 // Lightweight formatter for basic markdown-like syntax: headings, bold, italics,
 // inline code, and fenced code blocks. Purposefully minimal to avoid heavy deps.
@@ -443,7 +456,6 @@ const renderFormattedMessage = (content: string): ReactNode => {
   return <>{nodes}</>;
 };
 
-
 export const AISidebar: React.FC<AISidebarProps> = ({
   // windows,
   // onCreateTextWindow,
@@ -453,8 +465,8 @@ export const AISidebar: React.FC<AISidebarProps> = ({
   const [inputValue, setInputValue] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [isConfigured, setIsConfigured] = useState(false);
-  const [conversationId, setConversationId] = useState(() => 
-    `chat_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+  const [conversationId, setConversationId] = useState(
+    () => `chat_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
   ); // Current conversation ID
   const [isResizing, setIsResizing] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(380);
@@ -470,12 +482,15 @@ export const AISidebar: React.FC<AISidebarProps> = ({
   const [mentionQuery, setMentionQuery] = useState("");
   const [mentionFiles, setMentionFiles] = useState<any[]>([]);
   const [showHistory, setShowHistory] = useState(false);
-  const [conversationHistory, setConversationHistory] = useState<Array<{
-    id: string;
-    title: string;
-    lastMessage: Date;
-    messageCount: number;
-  }>>([]);
+  const [conversationHistory, setConversationHistory] = useState<
+    Array<{
+      id: string;
+      title: string;
+      lastMessage: Date;
+      messageCount: number;
+    }>
+  >([]);
+  const [textareaHeight, setTextareaHeight] = useState(48);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -492,7 +507,7 @@ export const AISidebar: React.FC<AISidebarProps> = ({
       setAnimationClass("");
       return;
     }
-    
+
     setAnimationClass(isHidden ? "slide-in-right" : "slide-out-right");
     if (!isHidden) {
       setTimeout(() => setIsHidden(true), 300);
@@ -500,7 +515,7 @@ export const AISidebar: React.FC<AISidebarProps> = ({
       setIsHidden(false);
     }
   };
-  
+
   const toggleFullscreen = () => {
     setIsFullscreen(!isFullscreen);
     if (!isFullscreen) {
@@ -511,7 +526,9 @@ export const AISidebar: React.FC<AISidebarProps> = ({
 
   const loadConversationHistory = async () => {
     try {
-      const result = await (window as any).electronAPI.invoke("ai:get-conversations");
+      const result = await (window as any).electronAPI.invoke(
+        "ai:get-conversations"
+      );
       if (result.success) {
         console.log("[Frontend] Raw conversation data:", result.data);
         const conversations = result.data.map((conv: any) => {
@@ -534,7 +551,10 @@ export const AISidebar: React.FC<AISidebarProps> = ({
 
   const loadConversation = async (convId: string) => {
     try {
-      const result = await (window as any).electronAPI.invoke("ai:get-conversation-messages", { conversationId: convId });
+      const result = await (window as any).electronAPI.invoke(
+        "ai:get-conversation-messages",
+        { conversationId: convId }
+      );
       if (result.success) {
         console.log("[Frontend] Raw message data:", result.data);
         const messages = result.data.map((msg: any) => ({
@@ -576,7 +596,7 @@ export const AISidebar: React.FC<AISidebarProps> = ({
             },
           ]);
         }
-        
+
         // Refresh conversation history
         await loadConversationHistory();
       }
@@ -689,7 +709,6 @@ export const AISidebar: React.FC<AISidebarProps> = ({
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, [showMentionDropdown]);
-
 
   const loadMentionFiles = async () => {
     try {
@@ -819,14 +838,12 @@ export const AISidebar: React.FC<AISidebarProps> = ({
     };
 
     setMessages((prev) => [...prev, userMessage]);
-    
+
     // Clear the justSent flag after animation completes
     setTimeout(() => {
-      setMessages((prev) => 
-        prev.map(msg => 
-          msg.id === userMessage.id 
-            ? { ...msg, justSent: false } 
-            : msg
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === userMessage.id ? { ...msg, justSent: false } : msg
         )
       );
     }, 400);
@@ -852,11 +869,13 @@ export const AISidebar: React.FC<AISidebarProps> = ({
       }
 
       // Prepare a live assistant message placeholder for streaming
-      const liveId = `stream_${conversationId}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      
+      const liveId = `stream_${conversationId}_${Date.now()}_${Math.random()
+        .toString(36)
+        .substr(2, 9)}`;
+
       // Set this as the active streaming message
       activeStreamingIdRef.current = liveId;
-      
+
       setMessages((prev) => [
         ...prev,
         {
@@ -871,36 +890,51 @@ export const AISidebar: React.FC<AISidebarProps> = ({
       // Subscribe to stream deltas with strict ID checking
       const onDelta = (
         _event: any,
-        payload: { conversationId: string; delta: string; targetMessageId?: string }
+        payload: {
+          conversationId: string;
+          delta: string;
+          targetMessageId?: string;
+        }
       ) => {
         // Only process if this is for our active streaming message
         if (payload?.conversationId !== conversationId) return;
         if (activeStreamingIdRef.current !== liveId) {
-          console.log(`[Frontend] Ignoring delta for inactive stream. Active: ${activeStreamingIdRef.current}, Received for: ${liveId}`);
+          console.log(
+            `[Frontend] Ignoring delta for inactive stream. Active: ${activeStreamingIdRef.current}, Received for: ${liveId}`
+          );
           return;
         }
-        
-        console.log(`[Frontend] Received delta for ${liveId}: "${payload.delta}" (${payload.delta.length} chars)`);
+
+        console.log(
+          `[Frontend] Received delta for ${liveId}: "${payload.delta}" (${payload.delta.length} chars)`
+        );
         setMessages((prev) => {
           const copy = [...prev];
           // Find the exact message by ID
-          const idx = copy.findIndex(m => m.id === liveId);
+          const idx = copy.findIndex((m) => m.id === liveId);
           if (idx !== -1) {
             const currentMessage = copy[idx] as any;
-            console.log(`[Frontend] Updating message at index ${idx} with id ${liveId}: "${payload.delta}"`);
+            console.log(
+              `[Frontend] Updating message at index ${idx} with id ${liveId}: "${payload.delta}"`
+            );
             copy[idx] = {
               ...currentMessage,
-              content: currentMessage.isThinking ? payload.delta : (currentMessage.content || "") + payload.delta,
+              content: currentMessage.isThinking
+                ? payload.delta
+                : (currentMessage.content || "") + payload.delta,
               isThinking: false, // Clear the thinking flag when real content arrives
               isStreaming: true, // Add streaming flag for animation
             };
           } else {
-            console.warn(`[Frontend] Could not find streaming message with id: ${liveId}. Available IDs:`, copy.map(m => m.id));
+            console.warn(
+              `[Frontend] Could not find streaming message with id: ${liveId}. Available IDs:`,
+              copy.map((m) => m.id)
+            );
           }
           return copy;
         });
       };
-      
+
       // Use the generic event but filter by conversationId and liveId
       window.electronAPI.on("ai:chat-stream-delta", onDelta);
 
@@ -912,7 +946,7 @@ export const AISidebar: React.FC<AISidebarProps> = ({
 
       // Unsubscribe immediately after the call
       window.electronAPI.off("ai:chat-stream-delta", onDelta);
-      
+
       // Clear the active streaming ID
       activeStreamingIdRef.current = null;
 
@@ -923,7 +957,7 @@ export const AISidebar: React.FC<AISidebarProps> = ({
         };
         setMessages((prev) => {
           const copy = [...prev];
-          const idx = copy.map(m => m.id).lastIndexOf(liveId);
+          const idx = copy.map((m) => m.id).lastIndexOf(liveId);
           if (idx !== -1) {
             copy[idx] = {
               ...copy[idx],
@@ -999,7 +1033,7 @@ export const AISidebar: React.FC<AISidebarProps> = ({
 
   return (
     <div
-      className={`${animationClass} ${isFullscreen ? 'fullscreen' : ''}`}
+      className={`${animationClass} ${isFullscreen ? "fullscreen" : ""}`}
       style={{
         position: "fixed",
         top: isFullscreen ? "0" : "52px",
@@ -1009,756 +1043,862 @@ export const AISidebar: React.FC<AISidebarProps> = ({
         width: isFullscreen ? "100vw" : `${sidebarWidth}px`,
         height: isFullscreen ? "100vh" : "calc(100vh - 64px)",
         backdropFilter: "blur(10px)",
-        backgroundColor: isFullscreen ? "rgba(15, 23, 42, 0.98)" : "rgba(31, 41, 55, 0.2)",
+        backgroundColor: isFullscreen
+          ? "rgba(15, 23, 42, 0.98)"
+          : "rgba(31, 41, 55, 0.2)",
         border: isFullscreen ? "none" : "1px solid #374151",
         borderRadius: isFullscreen ? "0" : "12px",
         display: "flex",
         flexDirection: "column",
         zIndex: isFullscreen ? 9999 : 150,
-        boxShadow: isFullscreen ? "none" : "0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.2)",
+        boxShadow: isFullscreen
+          ? "none"
+          : "0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.2)",
         transition: "all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)",
+        alignItems: isFullscreen ? "center" : "stretch",
       }}
     >
-      {/* Resize handle - only show when not fullscreen */}
-      {!isFullscreen && (
-        <div
-          ref={sidebarRef}
-          style={{
-            position: "absolute",
-            left: 0,
-            top: 0,
-            width: "4px",
-            height: "100%",
-            cursor: "col-resize",
-            backgroundColor: "transparent",
-            zIndex: 160,
-            borderTopLeftRadius: "12px",
-            borderBottomLeftRadius: "12px",
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.backgroundColor = "rgba(59, 130, 246, 0.3)";
-          }}
-          onMouseLeave={(e) => {
-            if (!isResizing) {
-              e.currentTarget.style.backgroundColor = "transparent";
-            }
-          }}
-        />
-      )}
-
-      {/* Header */}
+      {/* Fullscreen container wrapper */}
       <div
         style={{
-          padding: isFullscreen ? "24px" : "16px",
-          borderBottom: "1px solid #374151",
-          backgroundColor: "#111827",
-          borderTopLeftRadius: isFullscreen ? "0" : "12px",
-          borderTopRightRadius: isFullscreen ? "0" : "12px",
+          width: isFullscreen ? "100%" : "auto",
+          maxWidth: isFullscreen ? "720px" : "none",
+          height: "100%",
+          display: "flex",
+          flexDirection: "column",
         }}
       >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            marginBottom: "8px",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <div
-              style={{
-                width: "8px",
-                height: "8px",
-                backgroundColor: isConfigured ? "#10b981" : "#f59e0b",
-                borderRadius: "50%",
-                animation: isConfigured ? "pulse 2s infinite" : "none",
-              }}
-            />
-            <h3
-              style={{
-                margin: 0,
-                fontSize: "16px",
-                fontWeight: "600",
-                color: "#f9fafb",
-              }}
-            >
-              Bit Assistant
-            </h3>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <button
-              onClick={toggleFullscreen}
-              style={{
-                padding: "4px 8px",
-                borderRadius: "4px",
-                border: "1px solid #374151",
-                backgroundColor: isFullscreen ? "#3b82f6" : "transparent",
-                color: isFullscreen ? "#f3f4f6" : "#9ca3af",
-                fontSize: "12px",
-                cursor: "pointer",
-              }}
-              title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
-            >
-              {isFullscreen ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
-            </button>
-            <button
-              onClick={toggleHidden}
-              style={{
-                padding: "4px 8px",
-                borderRadius: "4px",
-                border: "1px solid #374151",
-                backgroundColor: "transparent",
-                color: "#9ca3af",
-                fontSize: "12px",
-                cursor: "pointer",
-              }}
-              title="Hide sidebar"
-            >
-              <X size={12} />
-            </button>
-            <button
-              onClick={async () => {
-                await loadConversationHistory();
-                setShowHistory(!showHistory);
-              }}
-              style={{
-                padding: "4px 8px",
-                borderRadius: "4px",
-                border: "1px solid #374151",
-                backgroundColor: showHistory ? "#374151" : "transparent",
-                color: showHistory ? "#f3f4f6" : "#9ca3af",
-                fontSize: "12px",
-                cursor: "pointer",
-              }}
-              onMouseEnter={(e) => {
-                if (!showHistory) {
-                  e.currentTarget.style.backgroundColor = "#374151";
-                  e.currentTarget.style.color = "#f3f4f6";
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (!showHistory) {
-                  e.currentTarget.style.backgroundColor = "transparent";
-                  e.currentTarget.style.color = "#9ca3af";
-                }
-              }}
-              title="Conversation History"
-            >
-              <History size={12} />
-            </button>
-            <button
-              onClick={startNewChat}
-              style={{
-                padding: "4px 8px",
-                borderRadius: "4px",
-                border: "1px solid #374151",
-                backgroundColor: "transparent",
-                color: "#9ca3af",
-                fontSize: "12px",
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                gap: "4px",
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = "#374151";
-                e.currentTarget.style.color = "#f3f4f6";
-              }}
-              onMouseLeave={(e) => {
+        {/* Resize handle - only show when not fullscreen */}
+        {!isFullscreen && (
+          <div
+            ref={sidebarRef}
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: "4px",
+              height: "100%",
+              cursor: "col-resize",
+              backgroundColor: "transparent",
+              zIndex: 160,
+              borderTopLeftRadius: "12px",
+              borderBottomLeftRadius: "12px",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = "rgba(59, 130, 246, 0.3)";
+            }}
+            onMouseLeave={(e) => {
+              if (!isResizing) {
                 e.currentTarget.style.backgroundColor = "transparent";
-                e.currentTarget.style.color = "#9ca3af";
-              }}
-              title="Start New Chat"
-            >
-              <Plus size={12} />
-              <span>New</span>
-            </button>
-          </div>
-        </div>
-        <p
-          style={{
-            margin: 0,
-            fontSize: "12px",
-            color: "#9ca3af",
-          }}
-        >
-          {isConfigured
-            ? `Ready to assist • ${messages.length} messages`
-            : "Configure API key in Settings to start chatting"}
-        </p>
-      </div>
+              }
+            }}
+          />
+        )}
 
-      {/* Conversation History Sidebar */}
-      {showHistory && (
+        {/* Header */}
         <div
           style={{
-            borderTop: "1px solid #374151",
+            padding: isFullscreen ? "24px" : "16px",
             borderBottom: "1px solid #374151",
             backgroundColor: "#111827",
-            maxHeight: "200px",
-            overflowY: "auto",
+            borderTopLeftRadius: isFullscreen ? "0" : "12px",
+            borderTopRightRadius: isFullscreen ? "0" : "12px",
+            width: isFullscreen ? "100vw" : "100%",
+            marginLeft: isFullscreen ? "calc((100vw - 720px) / -2)" : "0",
           }}
         >
           <div
             style={{
-              padding: "8px 16px",
-              fontSize: "12px",
-              color: "#9ca3af",
-              borderBottom: "1px solid #374151",
+              maxWidth: isFullscreen ? "720px" : "none",
+              margin: isFullscreen ? "0 auto" : "0",
             }}
           >
-            Conversation History ({conversationHistory.length})
-          </div>
-          {conversationHistory.length === 0 ? (
+            {/* Title row with buttons on right */}
             <div
               style={{
-                padding: "16px",
-                textAlign: "center",
-                color: "#6b7280",
-                fontSize: "14px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                marginBottom: "8px",
               }}
             >
-              No previous conversations
-            </div>
-          ) : (
-            conversationHistory
-              .sort((a, b) => b.lastMessage.getTime() - a.lastMessage.getTime())
-              .map((conv) => (
+              {/* Left side: Title */}
+              <div
+                style={{ display: "flex", alignItems: "center", gap: "8px" }}
+              >
                 <div
-                  key={conv.id}
-                  onClick={() => loadConversation(conv.id)}
                   style={{
-                    padding: "8px 16px",
+                    width: "8px",
+                    height: "8px",
+                    backgroundColor: isConfigured ? "#10b981" : "#f59e0b",
+                    borderRadius: "50%",
+                    animation: isConfigured ? "pulse 2s infinite" : "none",
+                  }}
+                />
+                <h3
+                  style={{
+                    margin: 0,
+                    fontSize: "16px",
+                    fontWeight: "600",
+                    color: "#f9fafb",
+                  }}
+                >
+                  Bit Assistant
+                </h3>
+              </div>
+
+              {/* Right side: buttons */}
+              <div
+                style={{ display: "flex", alignItems: "center", gap: "8px" }}
+              >
+                <button
+                  onClick={toggleFullscreen}
+                  style={{
+                    padding: "4px 8px",
+                    borderRadius: "4px",
+                    border: "1px solid #374151",
+                    backgroundColor: isFullscreen ? "#3b82f6" : "transparent",
+                    color: isFullscreen ? "#f3f4f6" : "#9ca3af",
+                    fontSize: "12px",
                     cursor: "pointer",
-                    borderBottom: "1px solid #374151",
-                    backgroundColor: conv.id === conversationId ? "#374151" : "transparent",
+                  }}
+                  title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
+                >
+                  {isFullscreen ? (
+                    <Minimize2 size={12} />
+                  ) : (
+                    <Maximize2 size={12} />
+                  )}
+                </button>
+                <button
+                  onClick={toggleHidden}
+                  style={{
+                    padding: "4px 8px",
+                    borderRadius: "4px",
+                    border: "1px solid #374151",
+                    backgroundColor: "transparent",
+                    color: "#9ca3af",
+                    fontSize: "12px",
+                    cursor: "pointer",
+                  }}
+                  title="Hide sidebar"
+                >
+                  <X size={12} />
+                </button>
+                <button
+                  onClick={async () => {
+                    await loadConversationHistory();
+                    setShowHistory(!showHistory);
+                  }}
+                  style={{
+                    padding: "4px 8px",
+                    borderRadius: "4px",
+                    border: "1px solid #374151",
+                    backgroundColor: showHistory ? "#374151" : "transparent",
+                    color: showHistory ? "#f3f4f6" : "#9ca3af",
+                    fontSize: "12px",
+                    cursor: "pointer",
                   }}
                   onMouseEnter={(e) => {
-                    if (conv.id !== conversationId) {
-                      e.currentTarget.style.backgroundColor = "#2d3748";
+                    if (!showHistory) {
+                      e.currentTarget.style.backgroundColor = "#374151";
+                      e.currentTarget.style.color = "#f3f4f6";
                     }
                   }}
                   onMouseLeave={(e) => {
-                    if (conv.id !== conversationId) {
+                    if (!showHistory) {
                       e.currentTarget.style.backgroundColor = "transparent";
+                      e.currentTarget.style.color = "#9ca3af";
                     }
                   }}
+                  title="Conversation History"
                 >
-                  <div
-                    style={{
-                      fontSize: "14px",
-                      color: "#f9fafb",
-                      marginBottom: "4px",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {conv.title.length > 30 ? `${conv.title.substring(0, 30)}...` : conv.title}
-                  </div>
-                  <div
-                    style={{
-                      fontSize: "11px",
-                      color: "#9ca3af",
-                      display: "flex",
-                      justifyContent: "space-between",
-                    }}
-                  >
-                    <span>{conv.messageCount} messages</span>
-                    <span>{conv.lastMessage.toLocaleDateString()}</span>
-                  </div>
-                </div>
-              ))
-          )}
-        </div>
-      )}
-
-      {/* Messages */}
-      <div
-        style={{
-          flex: 1,
-          padding: "16px",
-          overflowY: "auto",
-          display: "flex",
-          flexDirection: "column",
-          gap: "12px",
-        }}
-      >
-        {messages.map((message, index) => {
-          const isUser = message.role === "user";
-          const isAI = message.role === "assistant";
-          const isSystem = message.role === "system";
-          const messageAny = message as any;
-          
-          return (
-            <div
-              key={message.id}
-              className={`${messageAny.justSent ? 'message-slide-up' : ''} ${messageAny.isStreaming ? 'streaming-text' : ''}`}
-              style={{
-                width: "100%",
-                display: "flex",
-                flexDirection: "column",
-                alignItems: isUser ? "flex-end" : "flex-start",
-                marginBottom: index === messages.length - 1 ? "0" : "16px",
-              }}
-            >
-              {/* User messages keep their boxes */}
-              {isUser && (
-                <div
+                  <History size={12} />
+                </button>
+                <button
+                  onClick={startNewChat}
                   style={{
-                    padding: "12px 16px",
-                    borderRadius: "12px",
-                    backgroundColor: "#111827",
-                    color: "#f9fafb",
-                    fontSize: "14px",
-                    lineHeight: "1.5",
-                    maxWidth: "85%",
+                    padding: "4px 8px",
+                    borderRadius: "4px",
                     border: "1px solid #374151",
-                  }}
-                >
-                  {/* File References */}
-                  {message.fileReferences && message.fileReferences.length > 0 && (
-                    <div
-                      style={{
-                        marginBottom: "8px",
-                        padding: "8px",
-                        backgroundColor: "rgba(0, 0, 0, 0.2)",
-                        borderRadius: "6px",
-                        fontSize: "12px",
-                      }}
-                    >
-                      <div style={{ marginBottom: "4px", opacity: 0.8 }}>
-                        📎 Attached files:
-                      </div>
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: "4px" }}>
-                        {message.fileReferences.map((file, index) => (
-                          <span
-                            key={index}
-                            style={{
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: "4px",
-                              padding: "2px 6px",
-                              backgroundColor: "rgba(255, 255, 255, 0.1)",
-                              borderRadius: "3px",
-                              fontSize: "11px",
-                            }}
-                          >
-                            <File size={10} />
-                            {file.fileName}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  
-                  <MessageWithHover
-                    message={message}
-                    onCreateCodeWindow={handleCreateCodeWindow}
-                    renderFormattedMessage={renderFormattedMessage}
-                  />
-                </div>
-              )}
-              
-              {/* AI messages are fullwidth without boxes */}
-              {isAI && (
-                <div
-                  style={{
-                    width: "100%",
-                    color: "#f9fafb",
-                    fontSize: "14px",
-                    lineHeight: "1.6",
-                    padding: "8px 0",
-                  }}
-                >
-                  <StreamingTextDisplay
-                    finalContent={message.content}
-                    isStreaming={messageAny.isStreaming || false}
-                    isThinking={messageAny.isThinking || false}
-                    renderFormattedMessage={renderFormattedMessage}
-                  />
-                  {!messageAny.isThinking && (
-                    <MessageWithHover
-                      message={message}
-                      onCreateCodeWindow={handleCreateCodeWindow}
-                      renderFormattedMessage={() => null}
-                    />
-                  )}
-                </div>
-              )}
-              
-              {/* System messages with subtle styling */}
-              {isSystem && (
-                <div
-                  style={{
-                    width: "100%",
-                    padding: "8px 12px",
-                    borderRadius: "8px",
-                    backgroundColor: "rgba(55, 65, 81, 0.3)",
+                    backgroundColor: "transparent",
                     color: "#9ca3af",
-                    fontSize: "13px",
-                    lineHeight: "1.5",
-                    textAlign: "center",
-                    fontStyle: "italic",
-                  }}
-                >
-                  {message.content}
-                </div>
-              )}
-            </div>
-          );
-        })}
-
-
-        <div ref={messagesEndRef} />
-      </div>
-
-      {/* Input */}
-      <form
-        onSubmit={handleSubmit}
-        style={{
-          padding: "16px",
-          borderTop: "1px solid #374151",
-          borderBottomLeftRadius: "12px",
-          borderBottomRightRadius: "12px",
-          backgroundColor: "#111827",
-        }}
-      >
-        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-          {/* Attached Files Display */}
-          {attachedFiles.length > 0 && (
-            <div
-              style={{
-                display: "flex",
-                flexWrap: "wrap",
-                gap: "8px",
-                padding: "8px",
-                backgroundColor: "#374151",
-                borderRadius: "6px",
-                border: "1px solid #4b5563",
-              }}
-            >
-              {attachedFiles.map((file, index) => (
-                <div
-                  key={index}
-                  style={{
+                    fontSize: "12px",
+                    cursor: "pointer",
                     display: "flex",
                     alignItems: "center",
-                    gap: "6px",
-                    padding: "4px 8px",
-                    backgroundColor: "#1f2937",
-                    borderRadius: "4px",
-                    fontSize: "12px",
-                    color: "#f1f5f9",
-                    border: "1px solid #6b7280",
+                    gap: "4px",
                   }}
-                >
-                  <File size={14} color="#9ca3af" />
-                  <span>{file.fileName}</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setAttachedFiles((prev) =>
-                        prev.filter((_, i) => i !== index)
-                      );
-                    }}
-                    style={{
-                      background: "none",
-                      border: "none",
-                      color: "#9ca3af",
-                      cursor: "pointer",
-                      padding: "2px",
-                      borderRadius: "2px",
-                      display: "flex",
-                      alignItems: "center",
-                    }}
-                  >
-                    <X size={12} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Chat Input Container */}
-          <div style={{ position: "relative" }}>
-            <textarea
-              ref={textareaRef}
-              value={inputValue}
-              onChange={(e) => {
-                handleInputChange(e);
-                // Auto-expand textarea
-                const textarea = e.target;
-                textarea.style.height = 'auto';
-                const scrollHeight = Math.min(textarea.scrollHeight, 120); // Max ~5 lines
-                textarea.style.height = `${Math.max(scrollHeight, 48)}px`;
-              }}
-              onKeyDown={handleKeyDown}
-              placeholder={
-                isConfigured
-                  ? "Move with me..."
-                  : "Configure API key to start chatting..."
-              }
-              disabled={isProcessing || !isConfigured}
-              className="auto-expand-textarea"
-              style={{
-                width: "100%",
-                height: "48px", // Start with minimal height
-                minHeight: "48px",
-                maxHeight: "120px", // ~5 lines max
-                padding: "12px",
-                borderRadius: "8px",
-                border: "1px solid #374151",
-                backgroundColor: "#1f2937",
-                color: "#f9fafb",
-                fontSize: "14px",
-                outline: "none",
-                resize: "none",
-                lineHeight: 1.4,
-                overflowY: inputValue.split('\n').length > 4 ? "auto" : "hidden",
-                boxSizing: "border-box",
-              }}
-              onFocus={(e) => {
-                e.target.style.borderColor = "#3b82f6";
-              }}
-              onBlur={(e) => {
-                e.target.style.borderColor = "#374151";
-              }}
-            />
-
-            {/* Attach File Button */}
-            <button
-              type="button"
-              onClick={() => setShowFilePicker(true)}
-              disabled={isProcessing || !isConfigured}
-              style={{
-                position: "absolute",
-                bottom: "8px",
-                right: "8px",
-                width: "32px",
-                height: "32px",
-                backgroundColor: "#374151",
-                border: "1px solid #4b5563",
-                borderRadius: "6px",
-                cursor:
-                  isProcessing || !isConfigured ? "not-allowed" : "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                transition: "all 0.2s ease",
-              }}
-              onMouseEnter={(e) => {
-                if (!isProcessing && isConfigured) {
-                  e.currentTarget.style.backgroundColor = "#4b5563";
-                  e.currentTarget.style.borderColor = "#6b7280";
-                }
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = "#374151";
-                e.currentTarget.style.borderColor = "#4b5563";
-              }}
-              title="Attach files"
-            >
-              <Paperclip
-                size={16}
-                color={isProcessing || !isConfigured ? "#6b7280" : "#9ca3af"}
-              />
-            </button>
-
-            {/* @ Mention Dropdown - Positioned relative to input container */}
-            {showMentionDropdown && (
-              <div
-                style={{
-                  position: "absolute",
-                  left: "0px",
-                  bottom: "100%", // Position above the textarea
-                  marginBottom: "8px",
-                  backgroundColor: "#1f2937",
-                  border: "1px solid #374151",
-                  borderRadius: "8px",
-                  boxShadow:
-                    "0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)",
-                  maxHeight: "200px",
-                  overflowY: "auto",
-                  zIndex: 1002,
-                  minWidth: "200px",
-                  width: "100%",
-                }}
-              >
-                <div
-                  onClick={(e) => {
-                    console.log("Dropdown container clicked:", e);
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = "#374151";
+                    e.currentTarget.style.color = "#f3f4f6";
                   }}
-                  style={{ padding: "4px 0" }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = "transparent";
+                    e.currentTarget.style.color = "#9ca3af";
+                  }}
+                  title="Start New Chat"
                 >
-                  {(() => {
-                    const allFiles = flattenFiles(mentionFiles);
-                    const filteredFiles = allFiles.filter((file) =>
-                      file.name
-                        .toLowerCase()
-                        .includes(mentionQuery.toLowerCase())
-                    );
-
-                    console.log("Rendering files:", filteredFiles);
-
-                    return filteredFiles.length > 0 ? (
-                      filteredFiles.slice(0, 10).map((file, index) => (
-                        <div
-                          key={`file-${index}-${file.path}`}
-                          onMouseDown={(e) => {
-                            console.log("Mouse down on file!", file);
-                            // Try handling on mouse down instead of click
-                            e.preventDefault();
-                            e.stopPropagation();
-                            console.log(
-                              "Calling handleMentionSelect from mouseDown"
-                            );
-                            handleMentionSelect(file);
-                          }}
-                          onClick={(e) => {
-                            console.log("File div clicked!", file, e);
-                          }}
-                          style={{
-                            padding: "8px 12px",
-                            cursor: "pointer",
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "8px",
-                            fontSize: "14px",
-                            color: "#f1f5f9",
-                            borderBottom:
-                              index < filteredFiles.length - 1
-                                ? "1px solid #374151"
-                                : "none",
-                            backgroundColor: "transparent",
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.backgroundColor = "#374151";
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.backgroundColor =
-                              "transparent";
-                          }}
-                        >
-                          <File size={14} color="#9ca3af" />
-                          <span>{file.name}</span>
-                          <span
-                            style={{
-                              fontSize: "12px",
-                              color: "#6b7280",
-                              marginLeft: "auto",
-                            }}
-                          >
-                            {file.path.split("/").slice(-2, -1)[0] || ""}
-                          </span>
-                        </div>
-                      ))
-                    ) : (
-                      <div
-                        style={{
-                          padding: "8px 12px",
-                          fontSize: "14px",
-                          color: "#9ca3af",
-                          textAlign: "center",
-                        }}
-                      >
-                        {mentionQuery ? "No matching files" : "No files found"}
-                      </div>
-                    );
-                  })()}
-                </div>
+                  <Plus size={12} />
+                  <span>New</span>
+                </button>
               </div>
-            )}
-          </div>
-
-          <div
-            style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}
-          >
-            {isProcessing && abortController && (
-              <button
-                type="button"
-                onClick={async () => {
-                  abortController.abort();
-                  setAbortController(null);
-                  setIsProcessing(false);
-
-                  // Also abort on the backend
-                  try {
-                    await window.electronAPI.invoke("ai:abort", {
-                      conversationId,
-                    });
-                  } catch (error) {
-                    console.error("Failed to abort on backend:", error);
-                  }
-
-                  const abortMessage: ChatMessage = {
-                    id: `abort_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-                    role: "system",
-                    content: "Request aborted by user",
-                    timestamp: new Date(),
-                  };
-                  setMessages((prev) => [...prev, abortMessage]);
-                }}
-                style={{
-                  padding: "8px 16px",
-                  borderRadius: "6px",
-                  border: "none",
-                  backgroundColor: "#dc2626",
-                  color: "#f9fafb",
-                  fontSize: "14px",
-                  cursor: "pointer",
-                  transition: "background-color 0.2s",
-                  fontWeight: "500",
-                }}
-              >
-                Abort
-              </button>
-            )}
-            <button
-              type="submit"
-              disabled={!inputValue.trim() || isProcessing || !isConfigured}
+            </div>
+            
+            {/* Status line below title */}
+            <div
               style={{
-                padding: "8px 16px",
-                borderRadius: "6px",
-                border: "none",
-                backgroundColor:
-                  inputValue.trim() && !isProcessing && isConfigured
-                    ? "#3b82f6"
-                    : "#374151",
-                color: "#f9fafb",
-                fontSize: "14px",
-                cursor:
-                  inputValue.trim() && !isProcessing && isConfigured
-                    ? "pointer"
-                    : "not-allowed",
-                transition: "background-color 0.2s",
-                fontWeight: "500",
+                marginLeft: "16px", // Align with title text
+                fontSize: "12px",
+                color: "#9ca3af",
               }}
             >
-              {isConfigured ? "Send" : "Config"}
-            </button>
+              {isConfigured
+                ? `Ready to assist • ${messages.length} messages`
+                : "Configure API key in Settings to start chatting"}
+            </div>
           </div>
         </div>
-      </form>
 
+        {/* Conversation History Sidebar */}
+        {showHistory && (
+          <div
+            style={{
+              borderTop: "1px solid #374151",
+              borderBottom: "1px solid #374151",
+              backgroundColor: "#111827",
+              maxHeight: "200px",
+              overflowY: "auto",
+            }}
+          >
+            <div
+              style={{
+                padding: "8px 16px",
+                fontSize: "12px",
+                color: "#9ca3af",
+                borderBottom: "1px solid #374151",
+              }}
+            >
+              Conversation History ({conversationHistory.length})
+            </div>
+            {conversationHistory.length === 0 ? (
+              <div
+                style={{
+                  padding: "16px",
+                  textAlign: "center",
+                  color: "#6b7280",
+                  fontSize: "14px",
+                }}
+              >
+                No previous conversations
+              </div>
+            ) : (
+              conversationHistory
+                .sort(
+                  (a, b) => b.lastMessage.getTime() - a.lastMessage.getTime()
+                )
+                .map((conv) => (
+                  <div
+                    key={conv.id}
+                    onClick={() => loadConversation(conv.id)}
+                    style={{
+                      padding: "8px 16px",
+                      cursor: "pointer",
+                      borderBottom: "1px solid #374151",
+                      backgroundColor:
+                        conv.id === conversationId ? "#374151" : "transparent",
+                    }}
+                    onMouseEnter={(e) => {
+                      if (conv.id !== conversationId) {
+                        e.currentTarget.style.backgroundColor = "#2d3748";
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (conv.id !== conversationId) {
+                        e.currentTarget.style.backgroundColor = "transparent";
+                      }
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: "14px",
+                        color: "#f9fafb",
+                        marginBottom: "4px",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {conv.title.length > 30
+                        ? `${conv.title.substring(0, 30)}...`
+                        : conv.title}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: "11px",
+                        color: "#9ca3af",
+                        display: "flex",
+                        justifyContent: "space-between",
+                      }}
+                    >
+                      <span>{conv.messageCount} messages</span>
+                      <span>{conv.lastMessage.toLocaleDateString()}</span>
+                    </div>
+                  </div>
+                ))
+            )}
+          </div>
+        )}
 
-      <FilePicker
-        isOpen={showFilePicker}
-        onClose={() => setShowFilePicker(false)}
-        onSelectFiles={(files) => {
-          setAttachedFiles((prev) => [...prev, ...files]);
-        }}
-        multiSelect={true}
-      />
+        {/* Messages - full width scrollable area with internal content padding */}
+        <div
+          className="auto-hide-scrollbar"
+          style={{
+            position: "relative",
+            flex: 1,
+            width: isFullscreen ? "100vw" : "auto",
+            marginLeft: isFullscreen ? "calc((100vw - 720px) / -2)" : "0",
+            overflowY: "auto",
+            overflowX: "hidden",
+            paddingBottom: isFullscreen
+              ? `${Math.max(textareaHeight + 100, 160)}px`
+              : "16px", // Dynamic padding only for fullscreen
+          }}
+        >
+          <div
+            style={{
+              padding: "16px",
+              maxWidth: isFullscreen ? "720px" : "none",
+              margin: isFullscreen ? "0 auto" : "0",
+              display: "flex",
+              flexDirection: "column",
+              gap: "12px",
+            }}
+          >
+            {messages.map((message, index) => {
+              const isUser = message.role === "user";
+              const isAI = message.role === "assistant";
+              const isSystem = message.role === "system";
+              const messageAny = message as any;
 
-      <style>
-        {`
+              return (
+                <div
+                  key={message.id}
+                  className={`${
+                    messageAny.justSent ? "message-slide-up" : ""
+                  } ${messageAny.isStreaming ? "streaming-text" : ""}`}
+                  style={{
+                    width: "100%",
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: isUser ? "flex-end" : "flex-start",
+                    marginBottom: index === messages.length - 1 ? "0" : "16px",
+                  }}
+                >
+                  {/* User messages keep their boxes */}
+                  {isUser && (
+                    <div
+                      style={{
+                        padding: "12px 16px",
+                        borderRadius: "12px",
+                        backgroundColor: "#111827",
+                        color: "#f9fafb",
+                        fontSize: "14px",
+                        lineHeight: "1.5",
+                        maxWidth: "85%",
+                        border: "1px solid #374151",
+                      }}
+                    >
+                      {/* File References */}
+                      {message.fileReferences &&
+                        message.fileReferences.length > 0 && (
+                          <div
+                            style={{
+                              marginBottom: "8px",
+                              padding: "8px",
+                              backgroundColor: "rgba(0, 0, 0, 0.2)",
+                              borderRadius: "6px",
+                              fontSize: "12px",
+                            }}
+                          >
+                            <div style={{ marginBottom: "4px", opacity: 0.8 }}>
+                              📎 Attached files:
+                            </div>
+                            <div
+                              style={{
+                                display: "flex",
+                                flexWrap: "wrap",
+                                gap: "4px",
+                              }}
+                            >
+                              {message.fileReferences.map((file, index) => (
+                                <span
+                                  key={index}
+                                  style={{
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    gap: "4px",
+                                    padding: "2px 6px",
+                                    backgroundColor: "rgba(255, 255, 255, 0.1)",
+                                    borderRadius: "3px",
+                                    fontSize: "11px",
+                                  }}
+                                >
+                                  <File size={10} />
+                                  {file.fileName}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                      <MessageWithHover
+                        message={message}
+                        onCreateCodeWindow={handleCreateCodeWindow}
+                        renderFormattedMessage={renderFormattedMessage}
+                      />
+                    </div>
+                  )}
+
+                  {/* AI messages are fullwidth without boxes */}
+                  {isAI && (
+                    <div
+                      style={{
+                        width: "100%",
+                        color: "#f9fafb",
+                        fontSize: "14px",
+                        lineHeight: "1.6",
+                        padding: "8px 0",
+                      }}
+                    >
+                      <StreamingTextDisplay
+                        finalContent={message.content}
+                        isStreaming={messageAny.isStreaming || false}
+                        isThinking={messageAny.isThinking || false}
+                        renderFormattedMessage={renderFormattedMessage}
+                      />
+                      {!messageAny.isThinking && (
+                        <MessageWithHover
+                          message={message}
+                          onCreateCodeWindow={handleCreateCodeWindow}
+                          renderFormattedMessage={() => null}
+                        />
+                      )}
+                    </div>
+                  )}
+
+                  {/* System messages with subtle styling */}
+                  {isSystem && (
+                    <div
+                      style={{
+                        width: "100%",
+                        padding: "8px 12px",
+                        borderRadius: "8px",
+                        backgroundColor: "rgba(55, 65, 81, 0.3)",
+                        color: "#9ca3af",
+                        fontSize: "13px",
+                        lineHeight: "1.5",
+                        textAlign: "center",
+                        fontStyle: "italic",
+                      }}
+                    >
+                      {message.content}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+
+            <div ref={messagesEndRef} />
+          </div>
+        </div>
+
+        {/* Input */}
+        <div
+          style={{
+            position: isFullscreen ? "absolute" : "relative",
+            bottom: isFullscreen ? "16px" : "0",
+            left: isFullscreen ? "0" : "0",
+            right: isFullscreen ? "0" : "0",
+            width: isFullscreen ? "100%" : "auto",
+            display: "flex",
+            justifyContent: "center",
+            zIndex: 10,
+          }}
+        >
+          <form
+            onSubmit={handleSubmit}
+            style={{
+              width: isFullscreen ? "100%" : "100%",
+              maxWidth: isFullscreen ? "720px" : "none",
+              margin: isFullscreen ? "0 16px" : "0",
+              padding: "16px",
+              borderRadius: isFullscreen ? "16px" : "0 0 12px 12px",
+              border: isFullscreen
+                ? "1px solid rgba(148, 163, 184, 0.2)"
+                : "none",
+              backgroundColor: isFullscreen
+                ? "rgba(31, 41, 55, 0.8)"
+                : "#111827",
+              backdropFilter: isFullscreen ? "blur(12px)" : "none",
+              WebkitBackdropFilter: isFullscreen ? "blur(12px)" : "none",
+              boxShadow: isFullscreen
+                ? "0 8px 32px rgba(0, 0, 0, 0.3), 0 2px 8px rgba(0, 0, 0, 0.2)"
+                : "none",
+              borderTop: isFullscreen ? "none" : "1px solid #374151",
+              borderBottomLeftRadius: isFullscreen ? "16px" : "12px",
+              borderBottomRightRadius: isFullscreen ? "16px" : "12px",
+            }}
+          >
+            <div
+              style={{ display: "flex", flexDirection: "column", gap: "8px" }}
+            >
+              {/* Attached Files Display */}
+              {attachedFiles.length > 0 && (
+                <div
+                  style={{
+                    display: "flex",
+                    flexWrap: "wrap",
+                    gap: "8px",
+                    padding: "8px",
+                    backgroundColor: "#374151",
+                    borderRadius: "6px",
+                    border: "1px solid #4b5563",
+                  }}
+                >
+                  {attachedFiles.map((file, index) => (
+                    <div
+                      key={index}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        padding: "4px 8px",
+                        backgroundColor: "#1f2937",
+                        borderRadius: "4px",
+                        fontSize: "12px",
+                        color: "#f1f5f9",
+                        border: "1px solid #6b7280",
+                      }}
+                    >
+                      <File size={14} color="#9ca3af" />
+                      <span>{file.fileName}</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAttachedFiles((prev) =>
+                            prev.filter((_, i) => i !== index)
+                          );
+                        }}
+                        style={{
+                          background: "none",
+                          border: "none",
+                          color: "#9ca3af",
+                          cursor: "pointer",
+                          padding: "2px",
+                          borderRadius: "2px",
+                          display: "flex",
+                          alignItems: "center",
+                        }}
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Chat Input Container */}
+              <div style={{ position: "relative" }}>
+                <textarea
+                  ref={textareaRef}
+                  value={inputValue}
+                  onChange={(e) => {
+                    handleInputChange(e);
+                    // Auto-expand textarea
+                    const textarea = e.target;
+                    textarea.style.height = "auto";
+                    const scrollHeight = Math.min(textarea.scrollHeight, 120); // Max ~5 lines
+                    const newHeight = Math.max(scrollHeight, 48);
+                    textarea.style.height = `${newHeight}px`;
+                    setTextareaHeight(newHeight);
+                  }}
+                  onKeyDown={handleKeyDown}
+                  placeholder={
+                    isConfigured
+                      ? "Move with me..."
+                      : "Configure API key to start chatting..."
+                  }
+                  disabled={isProcessing || !isConfigured}
+                  className="auto-expand-textarea"
+                  style={{
+                    width: "100%",
+                    height: "48px", // Start with minimal height
+                    minHeight: "48px",
+                    maxHeight: "120px", // ~5 lines max
+                    padding: "12px",
+                    borderRadius: "8px",
+                    border: "1px solid #374151",
+                    backgroundColor: isFullscreen ? "transparent" : "#1f2937",
+                    color: "#f9fafb",
+                    fontSize: "14px",
+                    outline: "none",
+                    resize: "none",
+                    lineHeight: 1.4,
+                    overflowY:
+                      inputValue.split("\n").length > 4 ? "auto" : "hidden",
+                    boxSizing: "border-box",
+                  }}
+                  onFocus={(e) => {
+                    e.target.style.borderColor = "#3b82f6";
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = "#374151";
+                  }}
+                />
+
+                {/* Attach File Button */}
+
+                {/* @ Mention Dropdown - Positioned relative to input container */}
+                {showMentionDropdown && (
+                  <div
+                    style={{
+                      position: "absolute",
+                      left: "0px",
+                      bottom: "100%", // Position above the textarea
+                      marginBottom: "8px",
+                      backgroundColor: "#1f2937",
+                      border: "1px solid #374151",
+                      borderRadius: "8px",
+                      boxShadow:
+                        "0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)",
+                      maxHeight: "200px",
+                      overflowY: "auto",
+                      zIndex: 1002,
+                      minWidth: "200px",
+                      width: "100%",
+                    }}
+                  >
+                    <div
+                      onClick={(e) => {
+                        console.log("Dropdown container clicked:", e);
+                      }}
+                      style={{ padding: "4px 0" }}
+                    >
+                      {(() => {
+                        const allFiles = flattenFiles(mentionFiles);
+                        const filteredFiles = allFiles.filter((file) =>
+                          file.name
+                            .toLowerCase()
+                            .includes(mentionQuery.toLowerCase())
+                        );
+
+                        console.log("Rendering files:", filteredFiles);
+
+                        return filteredFiles.length > 0 ? (
+                          filteredFiles.slice(0, 10).map((file, index) => (
+                            <div
+                              key={`file-${index}-${file.path}`}
+                              onMouseDown={(e) => {
+                                console.log("Mouse down on file!", file);
+                                // Try handling on mouse down instead of click
+                                e.preventDefault();
+                                e.stopPropagation();
+                                console.log(
+                                  "Calling handleMentionSelect from mouseDown"
+                                );
+                                handleMentionSelect(file);
+                              }}
+                              onClick={(e) => {
+                                console.log("File div clicked!", file, e);
+                              }}
+                              style={{
+                                padding: "8px 12px",
+                                cursor: "pointer",
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "8px",
+                                fontSize: "14px",
+                                color: "#f1f5f9",
+                                borderBottom:
+                                  index < filteredFiles.length - 1
+                                    ? "1px solid #374151"
+                                    : "none",
+                                backgroundColor: "transparent",
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.backgroundColor =
+                                  "#374151";
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.backgroundColor =
+                                  "transparent";
+                              }}
+                            >
+                              <File size={14} color="#9ca3af" />
+                              <span>{file.name}</span>
+                              <span
+                                style={{
+                                  fontSize: "12px",
+                                  color: "#6b7280",
+                                  marginLeft: "auto",
+                                }}
+                              >
+                                {file.path.split("/").slice(-2, -1)[0] || ""}
+                              </span>
+                            </div>
+                          ))
+                        ) : (
+                          <div
+                            style={{
+                              padding: "8px 12px",
+                              fontSize: "14px",
+                              color: "#9ca3af",
+                              textAlign: "center",
+                            }}
+                          >
+                            {mentionQuery
+                              ? "No matching files"
+                              : "No files found"}
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "flex-end",
+                  gap: "8px",
+                }}
+              >
+                {/* Attachment Button */}
+                <button
+                  type="button"
+                  onClick={() => setShowFilePicker(true)}
+                  disabled={isProcessing || !isConfigured}
+                  style={{
+                    padding: "8px",
+                    borderRadius: "6px",
+                    border: "1px solid #4b5563",
+                    backgroundColor: "transparent",
+                    color:
+                      isProcessing || !isConfigured ? "#6b7280" : "#9ca3af",
+                    cursor:
+                      isProcessing || !isConfigured ? "not-allowed" : "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    transition: "all 0.2s ease",
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isProcessing && isConfigured) {
+                      e.currentTarget.style.borderColor = "#6b7280";
+                      e.currentTarget.style.color = "#d1d5db";
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.borderColor = "#4b5563";
+                    e.currentTarget.style.color =
+                      isProcessing || !isConfigured ? "#6b7280" : "#9ca3af";
+                  }}
+                  title="Attach files"
+                >
+                  <Paperclip size={16} />
+                </button>
+
+                {isProcessing && abortController && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      abortController.abort();
+                      setAbortController(null);
+                      setIsProcessing(false);
+
+                      // Also abort on the backend
+                      try {
+                        await window.electronAPI.invoke("ai:abort", {
+                          conversationId,
+                        });
+                      } catch (error) {
+                        console.error("Failed to abort on backend:", error);
+                      }
+
+                      const abortMessage: ChatMessage = {
+                        id: `abort_${Date.now()}_${Math.random()
+                          .toString(36)
+                          .substr(2, 9)}`,
+                        role: "system",
+                        content: "Request aborted by user",
+                        timestamp: new Date(),
+                      };
+                      setMessages((prev) => [...prev, abortMessage]);
+                    }}
+                    style={{
+                      padding: "8px 16px",
+                      borderRadius: "6px",
+                      border: "none",
+                      backgroundColor: "#dc2626",
+                      color: "#f9fafb",
+                      fontSize: "14px",
+                      cursor: "pointer",
+                      transition: "background-color 0.2s",
+                      fontWeight: "500",
+                    }}
+                  >
+                    Abort
+                  </button>
+                )}
+                <button
+                  type="submit"
+                  disabled={!inputValue.trim() || isProcessing || !isConfigured}
+                  style={{
+                    padding: "8px 16px",
+                    borderRadius: "6px",
+                    border: "none",
+                    backgroundColor:
+                      inputValue.trim() && !isProcessing && isConfigured
+                        ? "#3b82f6"
+                        : "#374151",
+                    color: "#f9fafb",
+                    fontSize: "14px",
+                    cursor:
+                      inputValue.trim() && !isProcessing && isConfigured
+                        ? "pointer"
+                        : "not-allowed",
+                    transition: "background-color 0.2s",
+                    fontWeight: "500",
+                  }}
+                >
+                  {isConfigured ? "Send" : "Config"}
+                </button>
+              </div>
+            </div>
+          </form>
+        </div>
+
+        <FilePicker
+          isOpen={showFilePicker}
+          onClose={() => setShowFilePicker(false)}
+          onSelectFiles={(files) => {
+            setAttachedFiles((prev) => [...prev, ...files]);
+          }}
+          multiSelect={true}
+        />
+
+        <style>
+          {`
           @keyframes pulse {
             0%, 100% { opacity: 1; }
             50% { opacity: 0.5; }
           }
         `}
-      </style>
+        </style>
+      </div>{" "}
+      {/* Close fullscreen container wrapper */}
     </div>
   );
 };
