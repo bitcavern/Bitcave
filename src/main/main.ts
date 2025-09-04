@@ -245,6 +245,12 @@ class BitcaveApp {
           );
           console.log(`[Main] Window created via IPC:`, window.id);
 
+          // Emit window:created event to the renderer
+          if (this.mainWindow) {
+            console.log(`[Main] Emitting window:created event for window:`, window.id);
+            this.mainWindow.webContents.send("window:created", window);
+          }
+
           return { success: true, data: window };
         } catch (error) {
           console.error(`[Main] IPC window:create error:`, error);

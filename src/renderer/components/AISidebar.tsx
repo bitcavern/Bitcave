@@ -1100,7 +1100,7 @@ export const AISidebar: React.FC<AISidebarProps> = ({
           style={{
             padding: isFullscreen ? "24px" : "16px",
             borderBottom: "1px solid #374151",
-            backgroundColor: "#111827",
+            backgroundColor: isFullscreen ? "#0f172a" : "#111827",
             borderTopLeftRadius: isFullscreen ? "0" : "12px",
             borderTopRightRadius: isFullscreen ? "0" : "12px",
             width: isFullscreen ? "100vw" : "100%",
@@ -1894,6 +1894,35 @@ export const AISidebar: React.FC<AISidebarProps> = ({
           @keyframes pulse {
             0%, 100% { opacity: 1; }
             50% { opacity: 0.5; }
+          }
+          
+          /* Auto-hide scrollbar styles */
+          .auto-hide-scrollbar {
+            scrollbar-width: thin;
+            scrollbar-color: rgba(156, 163, 175, 0.3) transparent;
+          }
+          
+          .auto-hide-scrollbar::-webkit-scrollbar {
+            width: 8px;
+          }
+          
+          .auto-hide-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+          }
+          
+          .auto-hide-scrollbar::-webkit-scrollbar-thumb {
+            background: rgba(156, 163, 175, 0.3);
+            border-radius: 4px;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+          }
+          
+          .auto-hide-scrollbar:hover::-webkit-scrollbar-thumb {
+            opacity: 1;
+          }
+          
+          .auto-hide-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: rgba(156, 163, 175, 0.5);
           }
         `}
         </style>

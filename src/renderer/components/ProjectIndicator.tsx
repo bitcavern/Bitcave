@@ -74,8 +74,7 @@ export const ProjectIndicator: React.FC<ProjectIndicatorProps> = ({
           left: leftSidebarVisible ? `${leftSidebarWidth}px` : "0",
           right: 0,
           height: "40px",
-          backgroundColor: "rgba(31, 41, 55, 0.2)",
-          backdropFilter: "blur(10px)",
+          backgroundColor: "#1f2937",
           zIndex: 10000,
           // @ts-ignore - webkit-app-region is a valid CSS property for Electron
           WebkitAppRegion: "drag" as any,
@@ -103,8 +102,7 @@ export const ProjectIndicator: React.FC<ProjectIndicatorProps> = ({
           left: leftSidebarVisible ? `${leftSidebarWidth}px` : "0",
           right: 0,
           height: "40px",
-          backgroundColor: "rgba(31, 41, 55, 0.2)",
-          backdropFilter: "blur(10px)",
+          backgroundColor: "#1f2937",
           zIndex: 10000,
           // @ts-ignore - webkit-app-region is a valid CSS property for Electron
           WebkitAppRegion: "drag" as any,
