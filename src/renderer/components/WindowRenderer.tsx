@@ -295,16 +295,86 @@ export const WindowRenderer: React.FC<WindowRendererProps> = ({
         }}
         onMouseDown={handleTitleMouseDown}
       >
+        {/* Window controls on left */}
+        <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+          <button
+            style={{
+              width: "14px",
+              height: "14px",
+              border: "none",
+              backgroundColor: "transparent",
+              color: "#9ca3af",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: "12px",
+              fontWeight: "bold",
+              borderRadius: "2px",
+              transition: "all 0.2s",
+            }}
+            onClick={(e) => {
+              e.stopPropagation();
+              onUpdate({ isMinimized: true });
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = "rgba(156, 163, 175, 0.2)";
+              e.currentTarget.style.color = "#f3f4f6";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = "transparent";
+              e.currentTarget.style.color = "#9ca3af";
+            }}
+            title="Minimize"
+          >
+            –
+          </button>
+          <button
+            style={{
+              width: "14px",
+              height: "14px",
+              border: "none",
+              backgroundColor: "transparent",
+              color: "#9ca3af",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: "12px",
+              fontWeight: "bold",
+              borderRadius: "2px",
+              transition: "all 0.2s",
+            }}
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete();
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = "rgba(239, 68, 68, 0.2)";
+              e.currentTarget.style.color = "#ef4444";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = "transparent";
+              e.currentTarget.style.color = "#9ca3af";
+            }}
+            title="Close"
+          >
+            ×
+          </button>
+        </div>
+
+        {/* Centered title area */}
         <div
           style={{
             display: "flex",
             alignItems: "center",
+            justifyContent: "center",
             gap: "8px",
             flex: 1,
             minWidth: 0,
           }}
         >
-                    <span style={{ fontSize: "16px" }}>{getIconForWindowType(window.type)}</span>
+          <span style={{ fontSize: "16px" }}>{getIconForWindowType(window.type)}</span>
           {isEditingTitle ? (
             <input
               ref={titleInputRef}
@@ -324,7 +394,8 @@ export const WindowRenderer: React.FC<WindowRendererProps> = ({
                 padding: "2px 6px",
                 outline: "none",
                 minWidth: 0,
-                flex: 1,
+                maxWidth: "200px",
+                textAlign: "center",
               }}
             />
           ) : (
@@ -338,11 +409,12 @@ export const WindowRenderer: React.FC<WindowRendererProps> = ({
                 textOverflow: "ellipsis",
                 whiteSpace: "nowrap",
                 cursor: window.isLocked ? "default" : "pointer",
-                flex: 1,
                 minWidth: 0,
+                maxWidth: "200px",
                 padding: "2px 4px",
                 borderRadius: "4px",
                 transition: "background-color 0.2s",
+                textAlign: "center",
               }}
               onMouseEnter={(e) => {
                 if (!window.isLocked) {
@@ -361,8 +433,8 @@ export const WindowRenderer: React.FC<WindowRendererProps> = ({
           {window.isLocked && <Lock size={12} />}
         </div>
 
+        {/* Right side - artifact management buttons */}
         <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
-          {/* Artifact management buttons */}
           {window.type === 'artifact' && (
             <>
               <button
@@ -453,37 +525,6 @@ export const WindowRenderer: React.FC<WindowRendererProps> = ({
               </button>
             </>
           )}
-          
-          <button
-            style={{
-              width: "16px",
-              height: "16px",
-              borderRadius: "50%",
-              border: "none",
-              backgroundColor: "#f59e0b",
-              cursor: "pointer",
-            }}
-            onClick={(e) => {
-              e.stopPropagation();
-              onUpdate({ isMinimized: true });
-            }}
-            title="Minimize"
-          />
-          <button
-            style={{
-              width: "16px",
-              height: "16px",
-              borderRadius: "50%",
-              border: "none",
-              backgroundColor: "#ef4444",
-              cursor: "pointer",
-            }}
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete();
-            }}
-            title="Close"
-          />
         </div>
       </div>
 
