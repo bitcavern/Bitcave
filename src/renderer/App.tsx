@@ -15,7 +15,8 @@ import type {
   CodeExecutionRequest,
   CodeExecutionResult,
 } from "@/shared/types";
-import { APP_CONFIG } from "@/shared/constants";
+import { findNextAvailablePosition, checkCollision } from "./utils/geometry";
+import { WINDOW_CONFIGS, APP_CONFIG } from "@/shared/constants";
 import "./styles/global.css"; // Import global styles
 
 // Grid snapping utility function
@@ -159,17 +160,25 @@ export const App: React.FC = () => {
 
   const handleCreateWindow = async (type: WindowType) => {
     try {
-      const baseX = canvasState.viewport.x + 100;
-      const baseY = canvasState.viewport.y + 100;
-      
-      // Snap initial position to grid if enabled
-      const x = snapToGridEnabled 
-        ? snapToGrid(baseX, APP_CONFIG.grid.size)
-        : baseX;
-      const y = snapToGridEnabled
-        ? snapToGrid(baseY, APP_CONFIG.grid.size) 
-        : baseY;
-      
+      const windowConfig = WINDOW_CONFIGS[type];
+      const { width, height } = windowConfig.defaultSize;
+
+      const initialX = snapToGridEnabled
+        ? snapToGrid(canvasState.viewport.x + 100, APP_CONFIG.grid.size)
+        : canvasState.viewport.x + 100;
+      const initialY = snapToGridEnabled
+        ? snapToGrid(canvasState.viewport.y + 100, APP_CONFIG.grid.size)
+        : canvasState.viewport.y + 100;
+
+      const { x, y } = findNextAvailablePosition(
+        initialX,
+        initialY,
+        width,
+        height,
+        windows,
+        APP_CONFIG.grid.size
+      );
+
       const result = await window.electronAPI.invoke("window:create", {
         type,
         config: {
@@ -226,9 +235,45 @@ export const App: React.FC = () => {
     position: { x: number; y: number }
   ) => {
     try {
+      const movedWindow = windows.find((w) => w.id === windowId);
+      if (!movedWindow) return;
+
+      let newPosition = position;
+      const otherWindows = windows.filter((w) => w.id !== windowId);
+      const movedWindowRect = {
+        ...position,
+        width: movedWindow.size.width,
+        height: movedWindow.size.height,
+      };
+
+      let collision = false;
+      for (const w of otherWindows) {
+        const windowRect = {
+          x: w.position.x,
+          y: w.position.y,
+          width: w.size.width,
+          height: w.size.height,
+        };
+        if (checkCollision(movedWindowRect, windowRect)) {
+          collision = true;
+          break;
+        }
+      }
+
+      if (collision) {
+        newPosition = findNextAvailablePosition(
+          position.x,
+          position.y,
+          movedWindow.size.width,
+          movedWindow.size.height,
+          otherWindows,
+          APP_CONFIG.grid.size
+        );
+      }
+
       const result = await window.electronAPI.invoke("window:move", {
         windowId,
-        position,
+        position: newPosition,
       });
 
       if (result.success) {
@@ -299,17 +344,25 @@ export const App: React.FC = () => {
 
   const handleCreateTextWindow = async (label: string, content?: string) => {
     try {
-      const baseX = canvasState.viewport.x + 100;
-      const baseY = canvasState.viewport.y + 100;
-      
-      // Snap initial position to grid if enabled
-      const x = snapToGridEnabled 
-        ? snapToGrid(baseX, APP_CONFIG.grid.size)
-        : baseX;
-      const y = snapToGridEnabled
-        ? snapToGrid(baseY, APP_CONFIG.grid.size) 
-        : baseY;
-      
+      const windowConfig = WINDOW_CONFIGS["text"];
+      const { width, height } = windowConfig.defaultSize;
+
+      const initialX = snapToGridEnabled
+        ? snapToGrid(canvasState.viewport.x + 100, APP_CONFIG.grid.size)
+        : canvasState.viewport.x + 100;
+      const initialY = snapToGridEnabled
+        ? snapToGrid(canvasState.viewport.y + 100, APP_CONFIG.grid.size)
+        : canvasState.viewport.y + 100;
+
+      const { x, y } = findNextAvailablePosition(
+        initialX,
+        initialY,
+        width,
+        height,
+        windows,
+        APP_CONFIG.grid.size
+      );
+
       const result = await window.electronAPI.invoke("window:create", {
         type: "text",
         config: {
